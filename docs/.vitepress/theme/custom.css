@@ -1,0 +1,29 @@
+/* Custom containers: ::: interview and ::: trap.
+   Built on VitePress's palette variables so light and dark themes both work. */
+
+.custom-block.interview {
+  border-color: var(--vp-c-indigo-2);
+  color: var(--vp-c-text-1);
+  background-color: var(--vp-c-indigo-soft);
+}
+
+.custom-block.interview a,
+.custom-block.interview code {
+  color: var(--vp-c-indigo-1);
+}
+
+.custom-block.trap {
+  border-color: var(--vp-c-danger-2);
+  color: var(--vp-c-text-1);
+  background-color: var(--vp-c-danger-soft);
+}
+
+.custom-block.trap a,
+.custom-block.trap code {
+  color: var(--vp-c-danger-1);
+}
+
+.custom-block.interview .custom-block-title,
+.custom-block.trap .custom-block-title {
+  font-weight: 600;
+}

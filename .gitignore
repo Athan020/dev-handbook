@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# VitePress
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+
+# Source KB: local reference only, never published
+_source/
+
+# .NET (samples/)
+bin/
+obj/
+*.user
+.vs/
+TestResults/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
