@@ -27,3 +27,11 @@
 .custom-block.trap .custom-block-title {
   font-weight: 600;
 }
+
+/* Mermaid diagrams.
+   Mermaid wraps label text in <p> and sizes each label box for its own 1.5
+   line-height, but `.vp-doc p` sets 28px, so wrapped labels overflow their box
+   and the last line is cut off. Let the <p> inherit Mermaid's line-height. */
+.vp-doc .mermaid foreignObject p {
+  line-height: inherit;
+}

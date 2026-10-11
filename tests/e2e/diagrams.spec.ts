@@ -13,6 +13,24 @@ const shotName = (url: string, theme: string, i: number) =>
 // Hide the sticky nav so it doesn't overlap tall diagrams in screenshots.
 const hideChrome = '.VPNav, .VPLocalNav { visibility: hidden !important; }'
 
+/**
+ * Labels whose text overflows their box. Mermaid sizes each HTML label when it renders;
+ * if it measures before the web font loads, multi-line labels get cut off.
+ */
+async function clippedLabels(page: Page, index: number): Promise<string[]> {
+  return diagram(page)
+    .nth(index)
+    .evaluate((svg) =>
+      Array.from(svg.querySelectorAll('foreignObject'))
+        .filter((fo) => {
+          const content = fo.firstElementChild
+          if (!content || !content.textContent?.trim()) return false
+          return content.getBoundingClientRect().height > fo.getBoundingClientRect().height + 1
+        })
+        .map((fo) => fo.textContent!.trim()),
+    )
+}
+
 function collectErrors(page: Page): string[] {
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`))
@@ -44,6 +62,7 @@ for (const { url, file, diagrams } of diagramPages) {
         const box = await svg.boundingBox()
         expect(box?.width, 'diagram width').toBeGreaterThan(50)
         expect(box?.height, 'diagram height').toBeGreaterThan(20)
+        expect(await clippedLabels(page, i), 'labels cut off (light)').toEqual([])
         lightStyles.push(await svg.locator('style').first().innerHTML())
         await svg.scrollIntoViewIfNeeded()
         await svg.screenshot({ path: shotName(url, 'light', i), style: hideChrome })
@@ -58,6 +77,7 @@ for (const { url, file, diagrams } of diagramPages) {
         await expect
           .poll(() => svg.locator('style').first().innerHTML(), { message: 'diagram redrawn for dark theme' })
           .not.toBe(lightStyles[i])
+        expect(await clippedLabels(page, i), 'labels cut off (dark)').toEqual([])
         await svg.scrollIntoViewIfNeeded()
         await svg.screenshot({ path: shotName(url, 'dark', i), style: hideChrome })
       }
