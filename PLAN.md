@@ -3,7 +3,7 @@
 > A VitePress site for building **T-shaped** software engineering skills, organised by orientation (frontend or backend). It is meant to help engineers grow in their current role and prepare for multi-round interviews. It teaches judgement: creative problem solving that still respects good practice.
 
 **Plan version:** v2 (journey-based). Supersedes v1, which was topic-based and migration-first. See §9.
-**Status:** Phase 0 complete (v2 structure) — awaiting review
+**Status:** Phase 0 complete and approved (2026-10-11). Paused. **Resume at Phase 1** (not started); see the open items in §11 first.
 **Owner:** Athan
 **Source material:** `_source/backend-engineer-kb/` is a **quarry, not a blueprint**. See §6.
 
@@ -49,6 +49,8 @@ This is the T in practice. The journey runs down the reader's core skill and out
 | Shared concept pages | A `reference/` page exists only once **two or more** journeys need the same concept | No |
 | Algorithm practice volume | Teach patterns and assessment skills, then link out to LeetCode and NeetCode | No |
 | Progress tracking | Client-side only (localStorage, wrapped in try/catch), no accounts | Yes |
+| Site generator, revisited | Stay on VitePress (assessed 2026-10-11): every planned interaction works as a Vue component, including real Postgres in the browser via PGlite (spiked). Astro + Starlight is the alternative | If the frontend track needs many live React demos, VitePress 2 stalls while 1.x needs security fixes, or the site needs accounts |
+| Interactivity | Vue components in the VitePress theme, loaded only on pages that use them, each covered by Playwright tests. SQL runs in the browser via PGlite. C# labs stay local in `samples/` (no .NET in the browser) | Yes |
 
 ## 4. Information architecture
 
@@ -221,14 +223,19 @@ Each phase ends with a review stop. Claude Code finishes the phase, summarises w
 1. Write `docs/guide/how-journeys-work.md`, `docs/guide/module-format.md` and `docs/_templates/stage.md`.
 2. Create `samples/` as a .NET 8 solution: a small transactions API (EF Core plus Postgres in Docker Compose) seeded with enough data, millions of rows, to make performance problems real. Each stage's lab changes or measures this one app.
 3. Write `backend/core-self-check.md` covering what B1 assumes (HTTP and REST, SQL basics, async/await), with links out.
-4. Write B1 stages 1–7 and the capstone, following §7 and mining `_source/` per §6.
+4. Build the interactive components B1 needs, each with Playwright tests:
+   - **Commit-then-reveal** for stop-and-think questions: the reader writes an answer before the reveal opens. Once built, update §7 and `CLAUDE.md` so stop-and-think uses it instead of `::: details`.
+   - **SQL playground** (PGlite, real Postgres in the browser) for stages 1–3 and 7: run queries and read real `EXPLAIN` plans against seeded data. It is about 16 MB before compression and loads only on pages that use it, so keep the seed small and show a loading state.
+   - **Simulators** (plain Vue, no libraries) where watching the mechanism helps: connection-pool queueing (stage 4), cache TTLs and stampedes (stage 5), replication lag and read-your-writes (stage 6), the consistent-hashing ring (stage 7).
+5. Write B1 stages 1–7 and the capstone, following §7 and mining `_source/` per §6.
 
-**Done when:** every B1 page follows the template, the labs run with `docker compose up` and `dotnet run` or `dotnet test`, and each stage's "What breaks next" leads into the following stage.
+**Done when:** every B1 page follows the template, the labs run with `docker compose up` and `dotnet run` or `dotnet test`, each stage's "What breaks next" leads into the following stage, and every interactive component passes its Playwright tests.
 
 ### Phase 2 — Journey B2 "Work that shouldn't happen in the request"
 
 - Extend the same sample app with RabbitMQ in Docker Compose. Use the raw client or a thin wrapper so the mechanics stay visible. A framework like MassTransit can be mentioned as the production choice.
 - Write B2 stages 1–7 and the capstone.
+- Simulators where they help, reusing the Phase 1 component patterns: duplicate delivery and idempotent consumers (stage 3), the outbox (stage 4), backlog growth and backpressure (stage 7).
 - Include the dual-write bug from §8 as the stage 4 trap, and build the outbox fix in the lab.
 
 **Done when:** same bar as Phase 1.
@@ -279,6 +286,13 @@ Order: **B3 → B4 → B5 → B6 → B7.** For each journey, first propose the f
 - Accessibility and mobile pass, and a link checker in CI.
 
 ## 11. Open questions
+
+Still open from the Phase 0 review:
+
+- Capstone pages use `stage: capstone` rather than a number. Confirm or change.
+- Review the journey premises, "By the end you'll be able to" lists and capstone titles on the B1 and B2 index pages (drafted in Phase 0).
+
+General:
 
 - Hosting: GitHub Pages, or Netlify/Vercel with preview deploys?
 - Will the site be public? This affects licensing and how much personal context is included.
