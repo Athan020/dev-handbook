@@ -53,8 +53,11 @@ for (const { url, file, diagrams } of diagramPages) {
       await page.goto(url)
 
       // Light theme: every block became an SVG with real content, and no Mermaid error.
+      // Wait until every diagram has settled (drawn or failed). Mermaid loads on demand
+      // after the page, so allow more than the default 5s.
+      await expect(page.locator('.mermaid > div')).toHaveCount(diagrams, { timeout: 15_000 })
+      expect(await page.locator('.mermaid-error').allInnerTexts(), 'diagrams that failed to render').toEqual([])
       await expect(diagram(page)).toHaveCount(diagrams)
-      await expect(page.getByText(/Syntax error in text|Parse error/)).toHaveCount(0)
       const lightStyles: string[] = []
       for (let i = 0; i < diagrams; i++) {
         const svg = diagram(page).nth(i)

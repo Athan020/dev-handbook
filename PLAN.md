@@ -39,7 +39,7 @@ This is the T in practice. The journey runs down the reader's core skill and out
 | Decision | Choice | Revisit? |
 |---|---|---|
 | Static site generator | VitePress (latest stable) | No |
-| Diagrams | Mermaid via `vitepress-plugin-mermaid` | Only if it breaks on the current VitePress |
+| Diagrams | Mermaid, rendered by our own `MermaidDiagram` theme component (loaded only on pages with diagrams). Replaced `vitepress-plugin-mermaid`, which stalled. Playwright tests check every diagram renders in both themes | Build-time SVG rendering if client-side rendering causes problems |
 | Search | VitePress built-in local search | Later, if Algolia is needed |
 | Hosting | GitHub Pages via GitHub Actions | Yes, could be Netlify or Vercel |
 | Organising unit | Journeys of stages, not topic folders | No |

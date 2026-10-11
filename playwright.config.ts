@@ -13,6 +13,9 @@ export default defineConfig({
   use: {
     baseURL: `http://localhost:${port}`,
     trace: 'retain-on-failure',
+    // `vitepress preview` brotli-compresses each response on the fly, which takes
+    // seconds for the Mermaid chunk. GitHub Pages doesn't, so ask for gzip.
+    extraHTTPHeaders: { 'Accept-Encoding': 'gzip' },
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {

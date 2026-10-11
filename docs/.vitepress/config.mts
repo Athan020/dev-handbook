@@ -1,5 +1,4 @@
 import { defineConfig, type DefaultTheme } from 'vitepress'
-import { withMermaid } from 'vitepress-plugin-mermaid'
 import container from 'markdown-it-container'
 
 // Named containers on top of VitePress's built-in tip/info/warning/danger/details.
@@ -112,52 +111,53 @@ const guideSidebar: DefaultTheme.SidebarItem[] = [
   },
 ]
 
-export default withMermaid(
-  defineConfig({
-    title: 'The Engineering Handbook',
-    description: 'Build T-shaped software engineering skills, organised by orientation.',
-    lang: 'en-GB',
-    // CI sets VITEPRESS_BASE to /<repo-name>/ for GitHub Pages project sites.
-    base: process.env.VITEPRESS_BASE ?? '/',
-    cleanUrls: true,
-    // _source/ and samples/ live outside docs/, so these entries are a safety net.
-    srcExclude: ['**/_source/**', '**/samples/**', '_templates/**'],
+export default defineConfig({
+  title: 'The Engineering Handbook',
+  description: 'Build T-shaped software engineering skills, organised by orientation.',
+  lang: 'en-GB',
+  // CI sets VITEPRESS_BASE to /<repo-name>/ for GitHub Pages project sites.
+  base: process.env.VITEPRESS_BASE ?? '/',
+  cleanUrls: true,
+  // _source/ and samples/ live outside docs/, so these entries are a safety net.
+  srcExclude: ['**/_source/**', '**/samples/**', '_templates/**'],
 
-    themeConfig: {
-      nav: [
-        { text: 'Guide', link: '/guide/t-shaped-skills', activeMatch: '^/guide/' },
-        { text: 'Backend', link: '/backend/', activeMatch: '^/backend/' },
-        { text: 'Frontend', link: '/frontend/', activeMatch: '^/frontend/' },
-        { text: 'Interviews', link: '/interviews/', activeMatch: '^/interviews/' },
-      ],
-      sidebar: {
-        '/guide/': guideSidebar,
-        '/backend/': backendSidebar,
-        '/frontend/': frontendSidebar,
-        '/interviews/': interviewsSidebar,
-      },
-      search: { provider: 'local' },
-      outline: { level: [2, 3] },
+  themeConfig: {
+    nav: [
+      { text: 'Guide', link: '/guide/t-shaped-skills', activeMatch: '^/guide/' },
+      { text: 'Backend', link: '/backend/', activeMatch: '^/backend/' },
+      { text: 'Frontend', link: '/frontend/', activeMatch: '^/frontend/' },
+      { text: 'Interviews', link: '/interviews/', activeMatch: '^/interviews/' },
+    ],
+    sidebar: {
+      '/guide/': guideSidebar,
+      '/backend/': backendSidebar,
+      '/frontend/': frontendSidebar,
+      '/interviews/': interviewsSidebar,
     },
+    search: { provider: 'local' },
+    outline: { level: [2, 3] },
+  },
 
-    mermaid: {
-      // The plugin defaults to 'loose'; we don't need click handlers or HTML labels.
-      securityLevel: 'strict',
-    },
+  markdown: {
+    config(md) {
+      // ```mermaid blocks become <MermaidDiagram>, registered in theme/index.ts.
+      const fence = md.renderer.rules.fence!
+      md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+        const token = tokens[idx]
+        if (token.info.trim() !== 'mermaid') return fence(tokens, idx, options, env, self)
+        return `<MermaidDiagram code="${encodeURIComponent(token.content)}" />\n`
+      }
 
-    markdown: {
-      config(md) {
-        for (const [name, defaultTitle] of Object.entries(customContainers)) {
-          md.use(container, name, {
-            render(tokens: any[], idx: number) {
-              const token = tokens[idx]
-              if (token.nesting !== 1) return '</div>\n'
-              const title = token.info.trim().slice(name.length).trim() || defaultTitle
-              return `<div class="${name} custom-block"><p class="custom-block-title">${md.utils.escapeHtml(title)}</p>\n`
-            },
-          })
-        }
-      },
+      for (const [name, defaultTitle] of Object.entries(customContainers)) {
+        md.use(container, name, {
+          render(tokens: any[], idx: number) {
+            const token = tokens[idx]
+            if (token.nesting !== 1) return '</div>\n'
+            const title = token.info.trim().slice(name.length).trim() || defaultTitle
+            return `<div class="${name} custom-block"><p class="custom-block-title">${md.utils.escapeHtml(title)}</p>\n`
+          },
+        })
+      }
     },
-  }),
-)
+  },
+})
