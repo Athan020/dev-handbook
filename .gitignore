@@ -19,3 +19,7 @@ TestResults/
 .DS_Store
 Thumbs.db
 .idea/
+
+# Playwright
+test-results/
+playwright-report/

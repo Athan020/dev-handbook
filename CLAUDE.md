@@ -9,6 +9,7 @@ A VitePress site for building T-shaped software engineering skills, organised by
 - `npm run docs:dev`: local dev server
 - `npm run docs:build`: production build. It must pass with no dead links before a phase is complete.
 - `npm run docs:preview`: preview the build
+- `npm run test:e2e`: build, then run the Playwright browser tests (diagrams render in both themes, navigation, every page loads cleanly). Diagram screenshots land in `test-results/diagrams/` for review. First run: `npx playwright install chromium`.
 - `docker compose up -d` (in `samples/`): start Postgres and, from Phase 2, RabbitMQ for the labs
 - `dotnet build samples/` and `dotnet test samples/`: compile and test the runnable samples
 
