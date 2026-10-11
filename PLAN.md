@@ -1,28 +1,38 @@
-# The Engineering Handbook — Build Plan
+# The Engineering Handbook — Build Plan (v2)
 
 > A VitePress site for building **T-shaped** software engineering skills, organised by orientation (frontend or backend). It is meant to help engineers grow in their current role and prepare for multi-round interviews. It teaches judgement: creative problem solving that still respects good practice.
 
-**Status:** Phase 0 complete — awaiting review
+**Plan version:** v2 (journey-based). Supersedes v1, which was topic-based and migration-first. See §9.
+**Status:** Phase 0 in progress (started under v1, needs adjusting to the v2 structure)
 **Owner:** Athan
-**Source material:** `_source/backend-engineer-kb/` (an existing Obsidian knowledge base, used as reference only and never published as-is)
+**Source material:** `_source/backend-engineer-kb/` is a **quarry, not a blueprint**. See §6.
 
 ---
 
-## 1. Why this exists
+## 1. The core idea
 
-The handbook is built from a real gap. Knowing how to *build* a REST API is different from knowing how it *behaves under pressure*. Interviews at senior level push past the request layer into database scaling, performance and asynchronous messaging. That is where reference-style notes fall short.
+Knowing how to *build* something is different from knowing how it *behaves under pressure*. Senior interviews, and senior work, live in that gap. Reference notes and topic catalogues don't close it, because they cover *what* things are, not *when you'd reach for them, what they break and what comes next*.
 
-Each module therefore **starts from something the reader already knows and pushes outward**: "your endpoint now gets 50x the traffic — what breaks first?"
+So the handbook is organised as **journeys**. Each journey:
+
+- **Starts from something the reader already owns.** For backend, that's a working REST API. For frontend, a working page.
+- **Applies pressure:** more traffic, slow work, failures, more teams, attackers.
+- **Moves outward one stage at a time.** Each stage's fix creates the problem that triggers the next stage.
+- **Ends with a capstone** that is a realistic interview question, answered with everything the journey built up.
+
+This is the T in practice. The journey runs down the reader's core skill and out along the bar of the T.
 
 ## 2. Principles
 
-1. **Training, not reference.** Every page asks the reader to think before it gives the answer.
-2. **Diagnose before you fix.** Options are presented as an escalation ladder, cheapest and simplest first. Readers should not jump to sharding or Kafka.
-3. **Trade-offs are the content.** For every technique, cover what it fixes, what it breaks and when *not* to use it.
-4. **Correct by construction.** Code samples must compile and run. Wrong code appears only on purpose, clearly labelled as a "spot the bug" exercise.
-5. **Concepts are portable.** Explanations are language-neutral. C# is the primary code language for backend examples, and other languages can be added later with VitePress code groups.
-6. **Banking is a recurring example domain**, not a target employer. Do not include role- or company-specific framing.
-7. **Vendor facts age badly.** Link to official docs for limits, quotas and pricing instead of hard-coding numbers.
+1. **Journeys define scope, not existing notes.** If a journey needs something, it gets written even if no note exists. If no journey needs a note, it stays in `_source/`.
+2. **Training, not reference.** Every page asks the reader to think before it gives the answer.
+3. **Diagnose before you fix.** Options appear as an escalation ladder, simplest and cheapest first. Readers should not jump to sharding or Kafka.
+4. **Trade-offs are the content.** For every technique, cover what it fixes, what it breaks and when *not* to use it.
+5. **Correct by construction.** Code compiles and runs. Wrong code appears only on purpose, as a labelled "spot the bug" exercise.
+6. **Don't rewrite what the internet already does well.** Basic fundamentals and LeetCode-style pattern drills get a short self-check and links out. The handbook spends its words on the gap between knowing and judging.
+7. **Concepts are portable.** Explanations are language-neutral. C# is the primary code language for backend examples, and other languages can come later through VitePress code groups.
+8. **Banking is a recurring example domain**, not a target employer. Do not include company- or role-specific framing.
+9. **Vendor facts age badly.** Link to official docs for limits, quotas and pricing instead of hard-coding them.
 
 ## 3. Decisions
 
@@ -32,250 +42,244 @@ Each module therefore **starts from something the reader already knows and pushe
 | Diagrams | Mermaid via `vitepress-plugin-mermaid` | Only if it breaks on the current VitePress |
 | Search | VitePress built-in local search | Later, if Algolia is needed |
 | Hosting | GitHub Pages via GitHub Actions | Yes, could be Netlify or Vercel |
+| Organising unit | Journeys of stages, not topic folders | No |
 | Backend code language | C# primary, concepts language-neutral | Yes |
-| Source KB location | `_source/`, excluded from the build with `srcExclude` | No |
-| Runnable code | Flagship modules keep code in `samples/` (a .NET solution) and import snippets with `<<< @/…` | No |
-| Progress tracking | Client-side only (localStorage), no accounts | Yes |
-| Algorithm practice volume | Do not duplicate LeetCode guides. Teach the patterns and assessment skills, then link out to LeetCode and NeetCode for practice volume | No |
-| Assessment practice | Practice problems ship with local test harnesses in `samples/assessments/` that include visible and hidden-style edge-case tests | No |
+| Source KB | `_source/`, read-only, excluded from the build with `srcExclude`, mined per module | No |
+| Runnable code | `samples/` .NET solution plus Docker Compose labs, imported into pages with `<<< @/…` | No |
+| Shared concept pages | A `reference/` page exists only once **two or more** journeys need the same concept | No |
+| Algorithm practice volume | Teach patterns and assessment skills, then link out to LeetCode and NeetCode | No |
+| Progress tracking | Client-side only (localStorage, wrapped in try/catch), no accounts | Yes |
 
 ## 4. Information architecture
 
 ```
 docs/
-├── index.md                 # Landing: what this is + "Choose your orientation" (Frontend / Backend)
+├── index.md                     # Landing: the idea + "Choose your orientation"
 ├── guide/
-│   ├── t-shaped-skills.md   # The T model: core (stem) vs breadth (bar)
-│   ├── how-to-use.md        # Growth path vs interview-prep path
-│   └── module-format.md     # The module template, explained to readers
+│   ├── t-shaped-skills.md       # The T model: core (stem) vs breadth (bar)
+│   ├── how-journeys-work.md     # Stages, triggers, capstones; growth path vs interview path
+│   └── module-format.md         # The stage template, explained to readers
 ├── backend/
-│   ├── index.md             # Track overview + the backend T map
-│   ├── core/                # The stem: what a backend engineer is expected to own
-│   │   ├── api-design/
-│   │   ├── data-modelling-and-sql/
-│   │   ├── auth/
-│   │   ├── code-design/     # SOLID, design patterns
-│   │   ├── dotnet/          # Stack depth: async/await, DI, memory, concurrency
-│   │   └── delivery/        # Testing, version control, CI/CD, SDLC
-│   ├── breadth/             # The bar: what surrounds the core and comes up in interviews
-│   │   ├── databases-at-scale/   ← flagship
-│   │   ├── messaging/            ← flagship
-│   │   ├── caching/
-│   │   ├── distributed-systems/
-│   │   ├── architecture/         # Microservices, CQRS, API gateways, DDD
-│   │   ├── cloud-and-infra/      # Containers, Kubernetes, IaC, serverless, autoscaling
-│   │   ├── observability/
-│   │   ├── networking/
-│   │   └── security/
-│   └── scenarios/           # Full system-design walkthroughs that combine modules
+│   ├── index.md                 # Backend T map + journey list + suggested order
+│   ├── core-self-check.md       # What the journeys assume you own, with self-check questions and links out
+│   ├── journeys/
+│   │   ├── your-api-gets-popular/
+│   │   │   ├── index.md         # Premise, stage map (Mermaid), what you'll be able to do
+│   │   │   ├── 01-measure-first.md
+│   │   │   └── …
+│   │   └── …
+│   └── reference/               # Shared concept pages (created only when needed by 2+ journeys)
 ├── frontend/
-│   ├── index.md             # Track overview + planned T map (outline only in v1)
-│   ├── core/
-│   └── breadth/
-└── interviews/              # Shared across tracks
-    ├── stages.md            # What each round tests
+│   ├── index.md
+│   ├── core-self-check.md
+│   └── journeys/                # Outlines only in v1 of the site
+└── interviews/                  # Shared across tracks
+    ├── stages.md                # What each round tests, and which journeys prepare you for it
     ├── system-design-framework.md
-    ├── coding-patterns.md
-    ├── behavioural.md       # STAR
-    └── assessments/         # Online assessments (HackerRank, Codility, CodeSignal)
-        ├── index.md         # What OAs are and how they differ from live interviews
-        ├── before-the-test.md
-        ├── test-day-strategy.md
-        ├── reading-constraints.md
-        ├── question-types/
-        │   ├── coding.md        # Function stubs vs stdin/stdout, hidden tests, partial credit
-        │   ├── sql.md
-        │   ├── projects.md      # Multi-file project tasks scored by tests
-        │   ├── code-review-and-debugging.md
-        │   └── multiple-choice.md
-        ├── csharp-toolkit.md    # Language reference for timed tests
-        └── practice/            # Timed practice sets with local test harnesses
+    ├── coding-patterns.md       # Short pattern map, links out
+    ├── behavioural.md           # STAR
+    └── assessments/             # Online assessments (Phase 3)
 ```
 
-### Source → target mapping
+## 5. Journeys
 
-| Source (`_source/backend-engineer-kb/`) | Target |
-|---|---|
-| `01-fundamentals/cap-theorem` | `backend/breadth/distributed-systems/` |
-| `01-fundamentals/design-patterns`, `solid-principles` | `backend/core/code-design/` |
-| `01-fundamentals/algorithms-data-structures` | `interviews/coding-patterns` + `interviews/assessments/` (split) |
-| `01-fundamentals/sdlc` | `backend/core/delivery/` |
-| `02-system-design/scalability` | `backend/breadth/databases-at-scale/` + `caching/` (split) |
-| `02-system-design/distributed-systems`, `redundancy-fault-tolerance`, `consistency-patterns` | `backend/breadth/distributed-systems/` |
-| `02-system-design/idempotency` | `backend/breadth/messaging/` (consumer side) + `backend/core/api-design/` (idempotency keys) |
-| `03-architecture/event-driven-architecture` | `backend/breadth/messaging/` |
-| `03-architecture/microservices`, `n-tier`, `cqrs-event-sourcing`, `api-gateway-patterns` | `backend/breadth/architecture/` |
-| `04-dotnet/*` | `backend/core/dotnet/` |
-| `05-databases/sql-fundamentals` | `backend/core/data-modelling-and-sql/` |
-| `05-databases/nosql-paradigms`, `database-selection`, `query-optimization`, `database-scaling-deep-dive` | `backend/breadth/databases-at-scale/` |
-| `06-cloud/messaging-events` | `backend/breadth/messaging/` (vendor appendix) |
-| `06-cloud/monitoring-observability` | `backend/breadth/observability/` |
-| `06-cloud/networking-security`, `security-services` | `backend/breadth/security/` |
-| `06-cloud/*` (remaining) | `backend/breadth/cloud-and-infra/` |
-| `07-devops/containerization`, `terraform` | `backend/breadth/cloud-and-infra/` (merge with `06-cloud/containerization-platforms`) |
-| `07-devops/ci-cd-pipelines`, `testing-strategies`, `version-control` | `backend/core/delivery/` |
-| `08-synthesis/*` | `backend/scenarios/` |
-| `09-system-design-prep/0x-*` scenarios | `backend/scenarios/` |
-| `09-system-design-prep/05-cheatsheet`, `06-decision-guides` | `interviews/system-design-framework` + per-module "decision" sections |
-| `10-interview-prep/interview-guide` | `interviews/` (strip company-specific content) |
-| `10-interview-prep/networking-fundamentals`, `firewalls` | `backend/breadth/networking/` |
-| `10-interview-prep/security-basics`, `authentication-authorization` | `backend/core/auth/` + `backend/breadth/security/` |
-| `11-domain-driven-design/*` | `backend/breadth/architecture/ddd/` |
-| `12-data-intensive-apps/storage-retrieval`, `replication-partitioning`, `data-models-query-languages` | `backend/breadth/databases-at-scale/` |
-| `12-data-intensive-apps/distributed-data` | `backend/breadth/distributed-systems/` |
-| `00-index` | Not migrated (replaced by the landing page and track overviews) |
+### Backend
 
-## 5. The module template
+**Premise shared by all journeys:** you own a working REST API for a banking product (accounts and transactions) backed by a relational database. It works in development. Then real life happens.
 
-`09-system-design-prep/08-troubleshoot-slow-reads.md` is the reference example of the tone and flow.
+**B1 — Your API gets popular** *(flagship, Phase 1)*
+
+| # | Stage | Triggered by |
+|---|---|---|
+| 1 | Measure first: latency percentiles, where time goes, reading a query plan | "The transactions endpoint is slow at peak" |
+| 2 | Indexes and query shape: composite, covering, selectivity, SARGable queries | The plan shows a full scan |
+| 3 | What is the ORM doing? N+1, over-fetching, offset vs keyset pagination | Indexed, but still hundreds of queries per request |
+| 4 | Too many connections: pool exhaustion, async all the way, timeouts | Fast queries, but requests queue under load |
+| 5 | Cache it, then invalidate it: cache-aside, TTLs, stampedes | The same hot reads, thousands of times a second |
+| 6 | Reads outgrow one box: read replicas, replication lag, read-your-writes | Cache misses and uncachable reads still saturate the primary |
+| 7 | Writes outgrow one box: partitioning vs sharding, hot keys, stable hashing | The primary is now write-bound |
+| ★ | Capstone: "Reads are degrading on a 10M-row table — what do you do?" plus back-of-envelope estimation | — |
+
+**B2 — Work that shouldn't happen in the request** *(flagship, Phase 2)*
+
+| # | Stage | Triggered by |
+|---|---|---|
+| 1 | Get it out of the request: in-process background work vs a queue | The transfer endpoint also sends an email and calls a fraud check |
+| 2 | Queues, topics or streams: picking the shape | More than one service now cares about "transfer completed" |
+| 3 | Delivered twice: at-least-once delivery and idempotent consumers | A customer gets two notifications |
+| 4 | The event that never got sent: the dual-write problem, outbox and inbox | Saved to the database, crashed before publishing |
+| 5 | Order matters, sometimes: partition keys, sessions, per-entity ordering | A "debit" is processed before its "account opened" |
+| 6 | Poison messages: retries, backoff, dead-letter queues, replay | One malformed message blocks the queue |
+| 7 | The queue keeps growing: backpressure, consumer scaling, lag monitoring | Month-end batch run |
+| ★ | Capstone: "Design a multi-channel notification system" | — |
+
+**B3 — The money must add up** *(Phase 4)*: transactions and isolation anomalies (lost update, write skew), optimistic vs pessimistic concurrency, idempotency keys on the API, double-entry ledgers, reconciliation. Capstone: *design a transfer between accounts*.
+
+**B4 — Things fail** *(Phase 4)*: timeouts, retries with backoff and jitter, circuit breakers and bulkheads, graceful degradation, rate limiting. Capstone: *design a rate limiter*.
+
+**B5 — One service becomes many** *(Phase 4)*: modular monolith first, boundaries (bounded contexts), data ownership, sync vs async between services, sagas, API gateways, strangler-fig migration. Capstone: *migrate a capability out of a monolith*.
+
+**B6 — You shipped it, now what?** *(Phase 4)*: logs, metrics and traces, SLOs, deployment strategies, feature flags, containers and autoscaling as needed, an incident walkthrough. Capstone: *"Latency doubled after a deploy — walk me through it"*.
+
+**B7 — Someone is trying to break it** *(Phase 4)*: authentication and authorisation (OAuth 2.0 and OIDC, JWT pitfalls), common web vulnerabilities, secrets handling, network boundaries. Capstone: *threat-model the transfer API*.
+
+Stage lists for B3–B7 are drafts. Propose the full stage table for a journey and get it approved before writing it.
+
+### Frontend (outline in Phase 5)
+
+**Premise:** you own a working page or app that calls a backend API.
+
+- **F1 — Your page feels slow:** the rendering pipeline, Core Web Vitals, bundle size, images, caching and CDNs.
+- **F2 — The API is flaky:** loading and error states, retries, optimistic UI, client-side data caching.
+- **F3 — State gets out of hand:** local vs shared vs server state, and when a state library helps or hurts.
+- **F4 — Everyone can use it:** accessibility as an engineering discipline.
+- **F5 — Someone injects a script:** XSS, CSP, where tokens live, CSRF.
+- **F6 — The app grows a team:** component architecture, design systems, testing strategy.
+
+## 6. Using the source material
+
+`_source/backend-engineer-kb/` holds Athan's earlier Obsidian notes. It is a **quarry**: useful parts get mined for specific stages, and the notes do not define structure or scope.
+
+When writing a stage:
+
+1. Search `_source/` for notes relevant to that stage.
+2. Reuse what is **correct and useful**, such as a diagram, a code example or a well-explained point. Rewrite it in the stage's voice. Never paste whole sections or pages.
+3. Check reused code against §8 (known issues) and against current .NET behaviour.
+4. List the notes consulted in the stage's `sources:` frontmatter.
+5. Notes that no journey needs stay in `_source/`. There is no migration step and no requirement to account for every source file.
+
+`_source/backend-engineer-kb/09-system-design-prep/08-troubleshoot-slow-reads.md` is the **tone reference**: it diagnoses before fixing, escalates in sensible order, and ends with the answer you'd give in the interview.
+
+## 7. The stage template
 
 **Frontmatter:**
 
 ```yaml
 ---
-title: Read replicas and replication lag
-track: backend          # backend | frontend
-layer: breadth          # core | breadth
-level: intermediate     # foundation | intermediate | advanced
-prerequisites: [backend/breadth/databases-at-scale/indexing]
-status: draft           # draft | migrated | rewritten | reviewed
+title: Too many connections
+track: backend            # backend | frontend
+journey: your-api-gets-popular
+stage: 4
+level: intermediate       # foundation | intermediate | advanced
+sources: [05-databases/query-optimization.md]   # _source notes consulted, if any
+status: draft             # draft | written | reviewed
 ---
 ```
 
 **Sections (in order):**
 
-1. **The scenario.** A concrete situation that starts from familiar ground.
+1. **Where we are.** One or two sentences recapping the previous stage's fix and the new symptom it led to (the trigger).
 2. **Stop and think.** Two to four questions. Answers go in `::: details` blocks so the reader commits first.
 3. **The mental model.** First principles, with a Mermaid diagram where structure matters.
 4. **The escalation ladder.** Options from cheapest to most complex. For each: what it fixes, what it costs, what it breaks.
 5. **Trade-offs at a glance.** One table.
-6. **Traps.** Common mistakes, including at least one "spot the bug" code sample in a `::: warning` block.
-7. **In the interview.** How the question is usually phrased, a short model answer, and three or more likely follow-ups with hidden answers.
-8. **Exercise.** Something to do: a lab in `samples/` (Docker Compose where useful), a design prompt or a code fix.
-9. **Related modules.**
+6. **Traps.** Common mistakes, including at least one "spot the bug" sample in a `::: trap` block.
+7. **In the interview.** How it's usually asked, a short model answer, and three or more follow-ups with hidden answers in a `::: interview` block.
+8. **Try it.** A lab in `samples/` (Docker Compose where useful), a design prompt or a code fix.
+9. **What breaks next.** The hook into the next stage.
 
-**Custom containers:** add `::: interview` and `::: trap` as named custom containers in the VitePress config, alongside the built-in `tip`, `warning` and `details`.
+Journey `index.md` pages include the premise, a Mermaid stage map, prerequisites from the core self-check, and what the reader will be able to explain at the end. Capstone pages follow the interview flow (clarify, estimate, design, deep dive) and link back to the stage that covers each decision.
 
-## 6. Phases
+## 8. Known issues in the source material
 
-Each phase ends with a review stop. Claude Code finishes the phase, summarises what changed, lists anything uncertain, and waits for approval before starting the next phase.
+Do not carry these over as correct. Use them as "spot the bug" material where they fit:
 
-### Phase 0 — Scaffold
+| File | Issue | Natural home |
+|---|---|---|
+| `05-databases/database-scaling-deep-dive.md` — `ShardRouter` | Uses `string.GetHashCode()`, which is randomised per process in modern .NET, so routing changes between restarts. Modulo hashing also makes adding shards expensive. | B1 stage 7 |
+| `03-architecture/event-driven-architecture.md` — `TransactionService`, `EventSourcedAccountRepository` | Saves to the database and then publishes, so a crash in between loses the event (dual write). | B2 stage 4 |
+| `06-cloud/messaging-events.md` — `EnqueueBatchAsync` | Reassigns a `using var` variable, which does not compile. | B2 (minor trap) |
+| `02-system-design/idempotency.md` — `PaymentService` | Debits and credits across services with no transaction or compensation, and stores the idempotency result in a cache separately from the database write. | B3 |
 
-- Initialise the repo: `package.json`, VitePress, the Mermaid plugin, `.gitignore`, `.editorconfig`.
-- Create the `docs/` structure from section 4, with stub `index.md` pages so every sidebar entry resolves.
-- Landing page: VitePress home layout with hero actions **Backend** and **Frontend**, plus a short explanation of the T model.
-- Per-track sidebars (`/backend/`, `/frontend/`, `/interviews/`, `/guide/`).
+## 9. Changes from v1
+
+- **Removed:** the Obsidian migration phase, `scripts/migrate-obsidian.mjs`, the `MIGRATION.md` report, the topic-folder structure (`core/`, `breadth/`) and the source-to-target mapping table.
+- **Changed:** the site is organised by journeys of stages. `_source/` is mined per stage instead of migrated. Phases are renumbered.
+- **Kept:** VitePress scaffolding, Mermaid, the custom containers, `samples/`, the stage template (adapted from the module template), the online assessment section and the known-issues list.
+- **If v1 Phase 1 work exists:** stop it. Remove the migration script, `MIGRATION.md` and any migrated pages under `docs/`. Confirm `_source/` is unmodified (`git diff --stat -- _source` should be empty). Commit the cleanup on its own.
+
+## 10. Phases
+
+Each phase ends with a review stop. Claude Code finishes the phase, summarises what changed, lists anything uncertain, and waits for approval before starting the next one.
+
+### Phase 0 — Scaffold (adjust to v2)
+
+- Repo setup: `package.json`, VitePress, the Mermaid plugin, `.gitignore`, `.editorconfig`.
+- Create the `docs/` structure from §4 with stub pages. For backend, add stub journey folders for B1 and B2 only, each with an `index.md` that shows the premise and stage table from §5. List B3–B7 on the backend index as "coming later". Do not create stub pages for them.
+- Landing page: VitePress home layout with hero actions **Backend** and **Frontend**, and a short explanation of the journey idea and the T model.
+- Sidebars per section (`/backend/`, `/frontend/`, `/interviews/`, `/guide/`), with backend journeys grouped and stages in order.
 - Custom containers `interview` and `trap`.
 - Local search enabled.
 - GitHub Actions workflow to build and deploy to GitHub Pages.
 - `srcExclude` covering `_source/**` and `samples/**`.
 
-**Done when:** `npm run docs:dev` serves the site, `npm run docs:build` passes with no dead links, and the landing page routes to both tracks.
+**Done when:** `npm run docs:dev` serves the site, `npm run docs:build` passes with no dead links, the landing page routes to both tracks, and the B1 and B2 journey indexes show their stage maps.
 
-### Phase 1 — Migrate the source KB
+### Phase 1 — Stage template and journey B1 "Your API gets popular"
 
-- Write `scripts/migrate-obsidian.mjs`. Do not hand-edit files for this step. The script should:
-  - Convert `[[path|Label]]` and `[[path]]` wiki-links to relative Markdown links, resolved against the mapping table above.
-  - Convert `> [!TIP]`, `> [!NOTE]` and `> [!WARNING]` callouts to `::: tip`, `::: info` and `::: warning`.
-  - Strip Mermaid `click` directives.
-  - Add frontmatter with `status: migrated`, `track`, `layer`.
-  - Report unresolved links and duplicates instead of guessing.
-- Move content into the target structure from the mapping table, merging duplicate files where noted.
-- Remove company- and role-specific content (the Capitec requirements table, company values, careers links).
-- Leave the content itself unchanged apart from syntax. Rewriting happens in later phases.
+1. Write `docs/guide/how-journeys-work.md`, `docs/guide/module-format.md` and `docs/_templates/stage.md`.
+2. Create `samples/` as a .NET 8 solution: a small transactions API (EF Core plus Postgres in Docker Compose) seeded with enough data, millions of rows, to make performance problems real. Each stage's lab changes or measures this one app.
+3. Write `backend/core-self-check.md` covering what B1 assumes (HTTP and REST, SQL basics, async/await), with links out.
+4. Write B1 stages 1–7 and the capstone, following §7 and mining `_source/` per §6.
 
-**Done when:** the build passes with no dead links, every source file is accounted for in a `MIGRATION.md` report (migrated, merged or dropped, with a reason), and nothing under `_source/` has been modified.
+**Done when:** every B1 page follows the template, the labs run with `docker compose up` and `dotnet run` or `dotnet test`, and each stage's "What breaks next" leads into the following stage.
 
-### Phase 2 — Template and flagship modules
+### Phase 2 — Journey B2 "Work that shouldn't happen in the request"
 
-1. Write `docs/guide/module-format.md` (reader-facing) and `docs/_templates/module.md` (author-facing).
-2. Create `samples/` as a .NET 8 solution for runnable snippets, with Docker Compose for Postgres and a message broker (RabbitMQ).
-3. Rewrite **Databases at scale** as a set of modules:
-   - Reading query plans and indexing (composite, covering, selectivity, SARGable queries)
-   - N+1 queries and ORM pitfalls
-   - Connection pooling and exhaustion
-   - Caching patterns and invalidation (or link to `caching/`)
-   - Read replicas and replication lag (read-your-writes)
-   - Transactions, isolation levels and locking
-   - Partitioning vs sharding (hash, range, directory, consistent hashing, hot keys)
-   - Capacity estimation: back-of-envelope numbers
-   - Scenario: "Slow reads on a 10M-row table" (rewrite of the existing piece)
-4. Rewrite **Messaging** as a set of modules:
-   - Why queues at all (decoupling, load levelling, async work)
-   - Queues vs pub/sub vs event streams
-   - Delivery guarantees and idempotent consumers
-   - Ordering and partition keys
-   - Retries, dead-letter queues and poison messages
-   - Backpressure and consumer scaling
-   - The dual-write problem: transactional outbox and inbox
-   - Sagas: choreography vs orchestration
-   - Appendix: managed services (SQS/SNS, Service Bus, Kafka, Event Hubs). Keep it short and link to vendor docs.
-5. Turn the known bugs in section 7 into "spot the bug" exercises.
+- Extend the same sample app with RabbitMQ in Docker Compose. Use the raw client or a thin wrapper so the mechanics stay visible. A framework like MassTransit can be mentioned as the production choice.
+- Write B2 stages 1–7 and the capstone.
+- Include the dual-write bug from §8 as the stage 4 trap, and build the outbox fix in the lab.
 
-**Done when:** both module sets follow the template, all code compiles in `samples/`, and every module has stop-and-think questions, interview follow-ups and an exercise.
+**Done when:** same bar as Phase 1.
 
 ### Phase 3 — Online assessment prep
 
-Company online assessments (OAs) are often the first technical gate, and they test differently from live interviews. There is no interviewer to steer you. Submissions are scored automatically against hidden test cases, often with partial credit per test, under a time limit and sometimes in a proctored or secure mode. Each company configures its own mix of question types, so the invite is the best guide to what's coming.
+Company online assessments (OAs) are often the first technical gate, and they test differently from live interviews. There is no interviewer. Submissions are scored automatically against hidden test cases, often with partial credit, under a time limit and sometimes in a proctored or secure mode. Each company configures its own mix of question types.
 
-The goal of this section is not another LeetCode guide. It covers the skills OAs reward that algorithm drills don't.
+The goal is not another LeetCode guide. It covers the skills OAs reward that algorithm drills don't.
 
-1. **`index.md`.** What an OA is, how HackerRank, Codility and CodeSignal differ from a candidate's point of view, and how to read an invite (duration, question count, languages, question types, proctoring). Link to each platform's official candidate help pages. Do not restate their rules, because they change.
-2. **`before-the-test.md`.** Practise in the platform's own IDE (most offer a sample test), set your language and editor preferences, do an environment check, and prepare a short language toolkit.
-3. **`test-day-strategy.md`.**
-   - Read every question first, then budget time by points, not by order.
-   - Bank partial credit: a correct brute force that passes the small tests beats an unfinished optimal solution.
-   - Write your own edge-case inputs before submitting (empty input, single element, duplicates, negatives, maximum sizes, overflow).
-   - Know when to move on.
-4. **`reading-constraints.md`.** How input size tells you the target complexity, for example roughly n ≤ 10³ allows O(n²), n ≤ 10⁵ needs O(n log n), and n ≤ 10⁶ or more needs O(n). Include an exercise: given only the constraints, name the likely approach.
-5. **Question types:**
-   - *Coding:* function-stub problems vs full stdin/stdout parsing, and why hidden tests fail (overflow, off-by-one, timeouts, unhandled edge cases).
-   - *SQL:* joins, grouping and `HAVING`, window functions, `NULL` handling, and dialect differences (SQL Server vs MySQL vs Postgres). This links to `backend/core/data-modelling-and-sql/`.
-   - *Projects:* multi-file tasks in a pre-configured IDE, such as adding an endpoint to an existing API and making the provided tests pass. Cover reading an unfamiliar codebase fast, running the tests first, and making small changes. This links to `backend/core/api-design/`.
-   - *Code review and debugging:* finding and fixing bugs in someone else's code. Reuse the "spot the bug" exercises from Phase 2.
-   - *Multiple choice:* language and framework trivia, output prediction and complexity questions.
-6. **`csharp-toolkit.md`.** Fast input parsing (`Console.In`, `StreamReader`, `Split` and `TryParse`), `long` vs `int` overflow, `PriorityQueue<TElement,TPriority>`, `SortedSet`, `Dictionary` patterns, `Array.Sort` with comparers, recursion depth limits and how to rewrite iteratively, and the LINQ performance traps that matter under time limits. Leave room for other languages through code groups.
-7. **Practice sets.** Three to five timed sets, each mixing question types and sized like a real OA. Each problem has a local test harness in `samples/assessments/` (xUnit) with visible tests and a separate set of hidden-style edge-case tests, so the reader experiences "passes the examples, fails the hidden tests" and learns from it. Point to LeetCode and NeetCode for additional pattern practice.
-8. **Frontend note.** Frontend OAs often include framework tasks in the IDE. Cover these in the frontend track (Phase 5) and link from here.
+```
+interviews/assessments/
+├── index.md                 # What OAs are; HackerRank vs Codility vs CodeSignal from a candidate's view; reading the invite
+├── before-the-test.md       # Practise in the platform IDE, language setup, environment check
+├── test-day-strategy.md     # Budget by points, bank partial credit, write edge cases, know when to move on
+├── reading-constraints.md   # Input size → target complexity, with an exercise
+├── question-types/
+│   ├── coding.md            # Function stubs vs stdin/stdout; why hidden tests fail
+│   ├── sql.md               # Joins, grouping, window functions, NULLs, dialects
+│   ├── projects.md          # Multi-file tasks scored by tests: read fast, run tests first, small changes
+│   ├── code-review-and-debugging.md   # Reuse "spot the bug" material from the journeys
+│   └── multiple-choice.md
+├── csharp-toolkit.md        # Fast input, overflow, PriorityQueue, SortedSet, sorting, recursion limits, LINQ traps
+└── practice/                # 3–5 timed sets; harnesses in samples/assessments/ (xUnit) with visible + hidden-style tests
+```
 
-**Done when:** every page above exists and follows the template where it applies, the practice harnesses run with `dotnet test`, and nothing duplicates standard LeetCode pattern guides beyond a short pattern map that links out.
+Link to each platform's official candidate help pages instead of restating their rules. Frontend-specific OA content goes to Phase 5.
 
-### Phase 4 — Remaining backend breadth
+**Done when:** every page exists, the practice harnesses run with `dotnet test`, and nothing duplicates standard LeetCode pattern guides beyond a short pattern map that links out.
 
-Rewrite in this order: distributed systems → caching → architecture (including DDD) → observability → security → networking → cloud and infra. Then core: API design → data modelling and SQL → .NET → auth → code design → delivery. Then scenarios.
+### Phase 4 — Backend journeys B3–B7
 
-**Done when:** no backend page is at `status: migrated`.
+Order: **B3 → B4 → B5 → B6 → B7.** For each journey, first propose the full stage table and capstone and get approval, then write it. Create `backend/reference/` pages only when two or more journeys need the same concept, for example idempotency (B2, B3, B4).
+
+**Done when:** all backend journeys are written and the interview stages page links each round to the journeys that prepare for it.
 
 ### Phase 5 — Frontend track (outline)
 
-- Draft the frontend T map. Core candidates: TypeScript, the browser rendering pipeline, component architecture, state management, accessibility, testing. Breadth candidates: web performance (Core Web Vitals), caching and CDNs, API consumption (REST/GraphQL, error handling, optimistic UI), security (XSS, CSRF, CSP), build tooling, design systems, SSR/SSG vs SPA.
-- Write module stubs with a scenario and stop-and-think questions only.
-- Outline frontend-specific online-assessment content (framework tasks in the platform IDE, DOM and JavaScript output-prediction questions) and link it from `interviews/assessments/`.
-- Athan reviews the outline before any full frontend content is written.
+- Draft the frontend T map, `frontend/core-self-check.md`, and a stage table for F1–F6.
+- Write F1 as a full journey only after Athan approves the outline.
+- Outline frontend online-assessment content (framework tasks in the platform IDE, DOM and JavaScript output-prediction questions) and link it from `interviews/assessments/`.
 
 ### Phase 6 — Interview layer and polish
 
-- `interviews/` pages, cross-linked to the modules that each round draws on.
-- Per-track self-assessment checklists with localStorage progress (wrapped in try/catch, works without storage).
-- A "Learning path" view per track: suggested order for growth vs. interview prep.
+- Finish the `interviews/` pages, cross-linked to journey capstones and stages.
+- Per-journey progress checklists (localStorage, try/catch, works without storage).
+- Two suggested paths per track: **growth** (journeys in order) and **interview in two weeks** (capstones first, then the stages they lean on, plus assessments).
 - Accessibility and mobile pass, and a link checker in CI.
 
-## 7. Known issues in the source material
-
-Fix these during rewriting, and turn them into exercises:
-
-| File | Issue |
-|---|---|
-| `05-databases/database-scaling-deep-dive.md` — `ShardRouter` | Uses `string.GetHashCode()`, which is randomised per process in modern .NET, so routing changes between restarts. Modulo hashing also makes adding shards expensive. Use a stable hash (for example, xxHash) and discuss consistent hashing. |
-| `03-architecture/event-driven-architecture.md` — `TransactionService`, `EventSourcedAccountRepository` | Saves to the database and then publishes to the broker. A crash in between loses the event (dual-write). Use the transactional outbox pattern. |
-| `06-cloud/messaging-events.md` — `EnqueueBatchAsync` | Reassigns a `using var` variable, which does not compile. |
-| `02-system-design/idempotency.md` — `PaymentService` | Debits and credits across services with no transaction or compensation, and stores the idempotency result in a cache separately from the database write. Discuss failure windows. |
-| `05-databases/database-scaling-deep-dive.md` | Too thin for the topic: it goes straight to sharding. Replace it with the module set in Phase 2. |
-
-## 8. Open questions
+## 11. Open questions
 
 - Hosting: GitHub Pages, or Netlify/Vercel with preview deploys?
 - Will the site be public? This affects licensing and how much personal context is included.
-- Should there be a fullstack track, or do cross-links between the two tracks cover it?
+- Should there be a fullstack track, or do cross-links between journeys cover it?
 - Add other backend languages (Java, Go, Python) through code groups, and if so, when?
