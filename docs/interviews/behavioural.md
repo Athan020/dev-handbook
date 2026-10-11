@@ -1,7 +1,6 @@
 ---
 title: Behavioural interviews
 track: shared
-level: foundation
 status: draft
 ---
 

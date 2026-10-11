@@ -1,7 +1,6 @@
 ---
 title: Multiple choice
 track: shared
-level: foundation
 status: draft
 ---
 

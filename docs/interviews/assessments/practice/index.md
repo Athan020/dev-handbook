@@ -1,7 +1,6 @@
 ---
 title: Practice sets
 track: shared
-level: foundation
 status: draft
 ---
 

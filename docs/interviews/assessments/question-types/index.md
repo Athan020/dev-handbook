@@ -1,7 +1,6 @@
 ---
 title: Question types
 track: shared
-level: foundation
 status: draft
 ---
 

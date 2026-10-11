@@ -1,7 +1,6 @@
 ---
 title: Project tasks
 track: shared
-level: foundation
 status: draft
 ---
 

@@ -18,7 +18,7 @@ A VitePress site for building T-shaped software engineering skills, organised by
 - `docs/.vitepress/`: config, theme, custom containers
 - `docs/<track>/journeys/<journey>/`: one folder per journey, with `index.md` plus numbered stage pages
 - `_source/backend-engineer-kb/`: Athan's earlier notes. **Read-only. Never edit, move or delete anything here.** It is a quarry to mine per stage, not a structure to migrate.
-- `samples/`: the .NET sample app, labs and assessment harnesses. Snippets are imported into pages with `<<< @/samples/...`.
+- `samples/`: the .NET sample app, labs and assessment harnesses. Snippets are imported into pages with `<<< @/../samples/...` (`@` resolves to `docs/`, so `samples/` is one level up).
 
 ## How to work
 

@@ -1,7 +1,6 @@
 ---
 title: C# toolkit for timed tests
 track: shared
-level: foundation
 status: draft
 ---
 

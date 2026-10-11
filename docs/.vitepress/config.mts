@@ -9,46 +9,59 @@ const customContainers: Record<string, string> = {
   trap: 'Spot the bug',
 }
 
+// Backend journeys: stages in order, then the capstone. [file, sidebar text]
+const backendJourneys: { slug: string; text: string; stages: [string, string][] }[] = [
+  {
+    slug: 'your-api-gets-popular',
+    text: 'B1: Your API gets popular',
+    stages: [
+      ['01-measure-first', '1. Measure first'],
+      ['02-indexes-and-query-shape', '2. Indexes and query shape'],
+      ['03-what-is-the-orm-doing', '3. What is the ORM doing?'],
+      ['04-too-many-connections', '4. Too many connections'],
+      ['05-cache-then-invalidate', '5. Cache it, then invalidate it'],
+      ['06-read-replicas', '6. Reads outgrow one box'],
+      ['07-partitioning-and-sharding', '7. Writes outgrow one box'],
+    ],
+  },
+  {
+    slug: 'work-outside-the-request',
+    text: "B2: Work that shouldn't happen in the request",
+    stages: [
+      ['01-get-it-out-of-the-request', '1. Get it out of the request'],
+      ['02-queues-topics-or-streams', '2. Queues, topics or streams'],
+      ['03-delivered-twice', '3. Delivered twice'],
+      ['04-dual-write-and-outbox', '4. The event that never got sent'],
+      ['05-ordering', '5. Order matters, sometimes'],
+      ['06-poison-messages', '6. Poison messages'],
+      ['07-backpressure', '7. The queue keeps growing'],
+    ],
+  },
+]
+
 const backendSidebar: DefaultTheme.SidebarItem[] = [
   { text: 'Backend track', link: '/backend/' },
+  { text: 'Core self-check', link: '/backend/core-self-check' },
   {
-    text: 'Core',
-    collapsed: false,
-    items: [
-      { text: 'API design', link: '/backend/core/api-design/' },
-      { text: 'Data modelling and SQL', link: '/backend/core/data-modelling-and-sql/' },
-      { text: 'Authentication and authorisation', link: '/backend/core/auth/' },
-      { text: 'Code design', link: '/backend/core/code-design/' },
-      { text: '.NET in depth', link: '/backend/core/dotnet/' },
-      { text: 'Delivery', link: '/backend/core/delivery/' },
-    ],
-  },
-  {
-    text: 'Breadth',
-    collapsed: false,
-    items: [
-      { text: 'Databases at scale', link: '/backend/breadth/databases-at-scale/' },
-      { text: 'Messaging', link: '/backend/breadth/messaging/' },
-      { text: 'Caching', link: '/backend/breadth/caching/' },
-      { text: 'Distributed systems', link: '/backend/breadth/distributed-systems/' },
-      { text: 'Architecture', link: '/backend/breadth/architecture/' },
-      { text: 'Cloud and infrastructure', link: '/backend/breadth/cloud-and-infra/' },
-      { text: 'Observability', link: '/backend/breadth/observability/' },
-      { text: 'Networking', link: '/backend/breadth/networking/' },
-      { text: 'Security', link: '/backend/breadth/security/' },
-    ],
-  },
-  {
-    text: 'Scenarios',
-    collapsed: false,
-    items: [{ text: 'Overview', link: '/backend/scenarios/' }],
+    text: 'Journeys',
+    items: backendJourneys.map(({ slug, text, stages }) => {
+      const base = `/backend/journeys/${slug}/`
+      return {
+        text,
+        link: base,
+        collapsed: true,
+        items: [
+          ...stages.map(([file, stageText]) => ({ text: stageText, link: base + file })),
+          { text: '★ Capstone', link: base + 'capstone' },
+        ],
+      }
+    }),
   },
 ]
 
 const frontendSidebar: DefaultTheme.SidebarItem[] = [
   { text: 'Frontend track', link: '/frontend/' },
-  { text: 'Core', link: '/frontend/core/' },
-  { text: 'Breadth', link: '/frontend/breadth/' },
+  { text: 'Core self-check', link: '/frontend/core-self-check' },
 ]
 
 const interviewsSidebar: DefaultTheme.SidebarItem[] = [
@@ -93,8 +106,8 @@ const guideSidebar: DefaultTheme.SidebarItem[] = [
     text: 'Guide',
     items: [
       { text: 'T-shaped skills', link: '/guide/t-shaped-skills' },
-      { text: 'How to use this handbook', link: '/guide/how-to-use' },
-      { text: 'How a module works', link: '/guide/module-format' },
+      { text: 'How journeys work', link: '/guide/how-journeys-work' },
+      { text: 'How a stage page works', link: '/guide/module-format' },
     ],
   },
 ]

@@ -1,7 +1,6 @@
 ---
 title: Before the test
 track: shared
-level: foundation
 status: draft
 ---
 

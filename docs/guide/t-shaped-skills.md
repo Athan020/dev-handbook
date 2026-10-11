@@ -1,7 +1,6 @@
 ---
 title: T-shaped skills
 track: shared
-level: foundation
 status: draft
 ---
 

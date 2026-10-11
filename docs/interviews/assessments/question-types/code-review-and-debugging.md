@@ -1,7 +1,6 @@
 ---
 title: Code review and debugging
 track: shared
-level: foundation
 status: draft
 ---
 

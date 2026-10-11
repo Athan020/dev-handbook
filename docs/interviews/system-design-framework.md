@@ -1,7 +1,6 @@
 ---
 title: System design framework
 track: shared
-level: foundation
 status: draft
 ---
 

@@ -1,7 +1,6 @@
 ---
 title: Coding patterns
 track: shared
-level: foundation
 status: draft
 ---
 

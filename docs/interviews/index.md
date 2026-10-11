@@ -1,7 +1,6 @@
 ---
 title: Interviews
 track: shared
-level: foundation
 status: draft
 ---
 

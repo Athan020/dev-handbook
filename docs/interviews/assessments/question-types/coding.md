@@ -1,7 +1,6 @@
 ---
 title: Coding questions
 track: shared
-level: foundation
 status: draft
 ---
 

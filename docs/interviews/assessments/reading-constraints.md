@@ -1,7 +1,6 @@
 ---
 title: Reading constraints
 track: shared
-level: foundation
 status: draft
 ---
 

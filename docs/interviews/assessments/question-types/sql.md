@@ -1,7 +1,6 @@
 ---
 title: SQL questions
 track: shared
-level: foundation
 status: draft
 ---
 

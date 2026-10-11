@@ -1,7 +1,6 @@
 ---
 title: Online assessments
 track: shared
-level: foundation
 status: draft
 ---
 

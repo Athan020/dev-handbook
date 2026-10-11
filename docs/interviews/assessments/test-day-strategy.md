@@ -1,7 +1,6 @@
 ---
 title: Test-day strategy
 track: shared
-level: foundation
 status: draft
 ---
 
