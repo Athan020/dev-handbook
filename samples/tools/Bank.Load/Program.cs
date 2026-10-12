@@ -8,13 +8,16 @@
 //
 // --hot sends that share of requests to the busiest accounts (ids 1 to --hot-accounts),
 // the way real traffic concentrates on a few popular keys.
+//
+// --transfers posts transfers between random accounts instead (journey B2).
 using System.Diagnostics;
 using System.Globalization;
+using System.Net.Http.Json;
 
 var options = Options.Parse(args);
 using var http = new HttpClient { BaseAddress = new Uri(options.Url), Timeout = TimeSpan.FromSeconds(30) };
 
-Console.WriteLine($"{options.Concurrency} workers for {options.Seconds}s against {options.Url}{options.Path}");
+Console.WriteLine($"{options.Concurrency} workers for {options.Seconds}s against {options.Url}{(options.Transfers ? "/transfers (POST)" : options.Path)}");
 
 // Warm up first: the first requests pay for JIT compilation and opening connections.
 // A struggling server can fail these too; that's what the measurement is for, so carry on.
@@ -39,11 +42,12 @@ var workers = Enumerable.Range(0, options.Concurrency).Select(async worker =>
     var mine = latencies[worker] = [];
     while (deadline.Elapsed.TotalSeconds < options.Seconds)
     {
-        var path = options.PathFor(options.NextAccount());
         var timer = Stopwatch.StartNew();
         try
         {
-            using var response = await http.GetAsync(path);
+            using var response = options.Transfers
+                ? await http.PostAsJsonAsync("/transfers", options.NextTransfer())
+                : await http.GetAsync(options.PathFor(options.NextAccount()));
             await response.Content.LoadIntoBufferAsync();
             if (!response.IsSuccessStatusCode) Interlocked.Increment(ref errors);
         }
@@ -72,8 +76,15 @@ static double Percentile(double[] sorted, double p) =>
     sorted[Math.Clamp((int)Math.Ceiling(p * sorted.Length) - 1, 0, sorted.Length - 1)];
 // #endregion percentile
 
-sealed record Options(string Url, string Path, int Concurrency, int Seconds, int Accounts, double Hot, int HotAccounts)
+sealed record Options(string Url, string Path, int Concurrency, int Seconds, int Accounts, double Hot, int HotAccounts, bool Transfers)
 {
+    public object NextTransfer()
+    {
+        var from = NextAccount();
+        var to = from % Accounts + 1; // a different account
+        return new { fromAccountId = from, toAccountId = to, amount = Math.Round(Random.Shared.Next(1000, 500_000) / 100m, 2), reference = "Load test" };
+    }
+
     public int NextAccount() => Random.Shared.NextDouble() < Hot
         ? Random.Shared.Next(1, HotAccounts + 1)
         : Random.Shared.Next(1, Accounts + 1);
@@ -95,6 +106,7 @@ sealed record Options(string Url, string Path, int Concurrency, int Seconds, int
             int.Parse(Get("seconds", "20"), CultureInfo.InvariantCulture),
             int.Parse(Get("accounts", "100000"), CultureInfo.InvariantCulture),
             double.Parse(Get("hot", "0"), CultureInfo.InvariantCulture),
-            int.Parse(Get("hot-accounts", "100"), CultureInfo.InvariantCulture));
+            int.Parse(Get("hot-accounts", "100"), CultureInfo.InvariantCulture),
+            args.Contains("--transfers"));
     }
 }

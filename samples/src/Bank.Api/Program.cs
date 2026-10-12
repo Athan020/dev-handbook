@@ -1,5 +1,6 @@
 using Bank.Api.Data;
 using Bank.Api.Endpoints;
+using Bank.Messaging;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -15,6 +16,13 @@ builder.Services.AddSingleton(new ReplicaOptions(new DbContextOptionsBuilder<Ban
     .UseSnakeCaseNamingConvention()
     .Options));
 builder.Services.AddScoped<ReadRouting>();
+
+// Journey B2: follow-up work after a transfer (email, fraud score), and where it can run.
+builder.Services.AddHttpClient<FollowUp>(http =>
+    http.BaseAddress = new Uri(builder.Configuration["FakeServices:Url"] ?? "http://localhost:5090"));
+builder.Services.AddSingleton<BackgroundFollowUpQueue>();
+builder.Services.AddHostedService<BackgroundFollowUpService>();
+builder.Services.AddSingleton<RabbitPublisher>();
 builder.Services.AddProblemDetails();
 builder.Services.AddMemoryCache();
 builder.Services.AddHybridCache();
@@ -62,6 +70,7 @@ app.UseExceptionHandler();
 app.MapGet("/health", () => Results.Ok("healthy"));
 app.MapAccountEndpoints();
 app.MapSummaryEndpoints();
+app.MapTransferEndpoints();
 
 app.Run();
 

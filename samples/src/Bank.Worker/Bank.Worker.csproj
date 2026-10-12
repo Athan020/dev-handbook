@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+  <ItemGroup>
+    <ProjectReference Include="../Bank.Messaging/Bank.Messaging.csproj" />
+  </ItemGroup>
+</Project>

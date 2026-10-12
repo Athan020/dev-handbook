@@ -30,6 +30,23 @@ services:
       timeout: 3s
       retries: 30
 
+  # The message broker for journey B2. Management UI: http://localhost:15672 (bank / bank).
+  rabbitmq:
+    image: rabbitmq:4.3.5-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: bank
+      RABBITMQ_DEFAULT_PASS: bank
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
   # A streaming-replication read replica (B1 stage 6). It only starts with the profile:
   #   docker compose --profile replica up -d
   # Set REPLICA_DELAY (milliseconds) to hold back applying changes, e.g.
@@ -59,3 +76,4 @@ services:
 volumes:
   postgres-data:
   replica-data:
+  rabbitmq-data:

@@ -14,5 +14,6 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Bank.Api/Bank.Api.csproj" />
     <ProjectReference Include="../../src/Bank.Sharding/Bank.Sharding.csproj" />
+    <ProjectReference Include="../../src/Bank.Messaging/Bank.Messaging.csproj" />
   </ItemGroup>
 </Project>

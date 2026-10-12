@@ -8,6 +8,9 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="../Bank.Messaging/Bank.Messaging.csproj" />
+  </ItemGroup>
+  <ItemGroup>
     <EmbeddedResource Include="Data/Seed/*.sql" />
   </ItemGroup>
 </Project>

@@ -33,6 +33,7 @@ The endpoints:
 | `GET /accounts/{id}/transactions/feed?pageSize=20&cursor=…` | The same, by cursor (keyset paging); pass each response's `nextCursor` to get the next page |
 | `GET /accounts/{id}/summary` | Balance, transaction count and last activity, computed from the whole history |
 | `POST /accounts/{id}/transactions` | Records a transaction, e.g. `{"amount": -100.00, "description": "Card payment"}` (for the labs, not a real transfer) |
+| `POST /transfers` | Moves money between two accounts, e.g. `{"fromAccountId": 1, "toAccountId": 2, "amount": 50.00, "reference": "Rent"}`, then does follow-up work (journey B2) |
 
 To start again from scratch, run `docker compose down -v` (this deletes the data), then repeat the steps above.
 
@@ -44,9 +45,26 @@ To seed less data on a slower machine: `dotnet run --project src/Bank.Api -- see
 - **Only primary keys are indexed.** Choosing the other indexes is part of B1 stage 2.
 - **Realistic, deterministic data.** 100,000 accounts and 10 million transactions over two years. A few accounts are very busy: account 1 has about 2% of all transactions, and the busiest 1% of accounts have about 20%. The median account has around 50. The data is generated from a fixed seed, so everyone gets the same rows and the same query plans.
 
+## Journey B2: messaging
+
+Journey B2 adds RabbitMQ (started by `docker compose up -d`; management UI at http://localhost:15672, user `bank`, password `bank`) and two more processes. Run each in its own terminal:
+
+```sh
+dotnet run --project tools/Bank.FakeServices   # stand-in email and fraud services on port 5090
+dotnet run --project src/Bank.Worker           # does follow-up work taken off RabbitMQ
+```
+
+`--Lab:Transfers=Inline|Background|Queue` on the API chooses where a transfer's follow-up work runs (default `Inline`). Make the fake services slow or unreliable while they run, and see what they've done:
+
+```sh
+curl -X POST localhost:5090/settings -H "Content-Type: application/json" -d '{"emailDelayMs": 300, "fraudDelayMs": 500, "failureRate": 0.2}'
+curl localhost:5090/stats
+```
+
 ## Lab tools
 
 - **Load generator.** `dotnet run --project tools/Bank.Load -- --seconds 20 --concurrency 8` sends requests for random accounts and reports latency percentiles. Use `--path` to target another endpoint, for example `--path "/accounts/{id}/transactions/feed"`.
+- **Transfers under load.** `dotnet run --project tools/Bank.Load -- --transfers` posts transfers between random accounts instead of reading.
 - **Hot accounts.** Add `--hot 0.8 --hot-accounts 100` to the load generator to send 80% of requests to the 100 busiest accounts.
 - **Switching implementations.** Several endpoints have versions you can measure against each other, chosen at startup:
   - `--Lab:Transactions=Naive|Projected|Blocking` for the transactions page (default `Naive`)
