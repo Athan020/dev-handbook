@@ -10,6 +10,17 @@ CREATE TABLE accounts (
 );
 
 
+CREATE TABLE idempotency_keys (
+    payer_account_id integer NOT NULL,
+    key character varying(100) NOT NULL,
+    request_hash character varying(64) NOT NULL,
+    status_code integer,
+    response jsonb,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT pk_idempotency_keys PRIMARY KEY (payer_account_id, key)
+);
+
+
 CREATE TABLE outbox_messages (
     id uuid NOT NULL,
     position bigint GENERATED ALWAYS AS IDENTITY,
@@ -70,6 +81,9 @@ CREATE TABLE transactions (
     CONSTRAINT fk_transactions_accounts_account_id FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE RESTRICT,
     CONSTRAINT fk_transactions_accounts_counterparty_account_id FOREIGN KEY (counterparty_account_id) REFERENCES accounts (id) ON DELETE RESTRICT
 );
+
+
+CREATE INDEX ix_idempotency_keys_created_at ON idempotency_keys (created_at);
 
 
 CREATE INDEX ix_outbox_messages_created_at ON outbox_messages (created_at) WHERE published_at IS NULL;

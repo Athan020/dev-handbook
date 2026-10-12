@@ -117,6 +117,88 @@ if (Array.IndexOf(args, "--payroll") is var payrollAt and >= 0)
     return;
 }
 
+// --double-pay N (B3 stage 3): N payments of 1.00 from one busy account, made the way a phone
+// makes them. If no answer arrives within --timeout-ms (default 1000), it sends the payment
+// again, up to three attempts, while the first request carries on at the server. Every tenth
+// payment is also double-tapped: sent twice at once. --keys sends one Idempotency-Key per payment.
+if (Array.IndexOf(args, "--double-pay") is var doubleAt and >= 0)
+{
+    var count = int.Parse(args[doubleAt + 1], CultureInfo.InvariantCulture);
+    var timeout = TimeSpan.FromMilliseconds(Arg("--timeout-ms", 1000));
+    var keys = args.Contains("--keys");
+    var payer = await OpenFundedAsync("Busy payer", count * 10m);
+    var payee = await OpenFundedAsync("Payee", 0m);
+    var statuses = new System.Collections.Concurrent.ConcurrentDictionary<string, int>();
+    var allRequests = new System.Collections.Concurrent.ConcurrentBag<Task>();
+    var next = 0;
+    var unanswered = 0;
+
+    async Task SendAsync(string? key)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Post, "/transfers")
+        {
+            Content = JsonContent.Create(new { fromAccountId = payer, toAccountId = payee, amount = 1m, reference = "Coffee" }),
+        };
+        if (key is not null)
+        {
+            message.Headers.Add("Idempotency-Key", key);
+        }
+        try
+        {
+            using var response = await http.SendAsync(message);
+            var label = response.Headers.Contains("Idempotent-Replayed") ? $"{(int)response.StatusCode} replayed" : $"{(int)response.StatusCode}";
+            statuses.AddOrUpdate(label, 1, (_, n) => n + 1);
+        }
+        catch (TaskCanceledException)
+        {
+            statuses.AddOrUpdate("no answer in 30 s", 1, (_, n) => n + 1);
+        }
+    }
+
+    var timer = Stopwatch.StartNew();
+    await Task.WhenAll(Enumerable.Range(0, options.Concurrency).Select(async _ =>
+    {
+        while (Interlocked.Increment(ref next) is var i && i <= count)
+        {
+            var key = keys ? Guid.NewGuid().ToString() : null;
+            var attempts = new List<Task> { SendAsync(key) };
+            if (i % 10 == 0)
+            {
+                attempts.Add(SendAsync(key)); // a double tap
+            }
+            foreach (var attempt in attempts)
+            {
+                allRequests.Add(attempt);
+            }
+
+            // Wait for an answer; after each timeout, try again, leaving the earlier request running.
+            for (var tries = 1; ; tries++)
+            {
+                var answered = Task.WhenAny(attempts);
+                if (await Task.WhenAny(answered, Task.Delay(timeout)) == answered)
+                {
+                    break;
+                }
+                if (tries == 3)
+                {
+                    Interlocked.Increment(ref unanswered);
+                    break;
+                }
+                var retry = SendAsync(key);
+                attempts.Add(retry);
+                allRequests.Add(retry);
+            }
+        }
+    }));
+    await Task.WhenAll(allRequests); // let every request the server is still working on finish
+    var received = (await http.GetFromJsonAsync<Summary>($"/accounts/{payee}/summary"))!.Balance;
+
+    Console.WriteLine($"{count} payments of 1.00 {(keys ? "with" : "without")} idempotency keys, client timeout {timeout.TotalMilliseconds:F0} ms, in {timer.Elapsed.TotalSeconds:F1}s.");
+    Console.WriteLine($"Requests sent: {allRequests.Count}; responses {string.Join(", ", statuses.OrderBy(s => s.Key).Select(s => $"{s.Key} x {s.Value}"))}.");
+    Console.WriteLine($"The payee received {received:F2} for {count} payments: {received - count:F0} extra payments. The client gave up waiting on {unanswered} payments.");
+    return;
+}
+
 // --crossfire N (B3 stage 2): two accounts paying each other, A to B and B to A, N transfers in all.
 if (Array.IndexOf(args, "--crossfire") is var crossAt and >= 0)
 {
@@ -134,7 +216,10 @@ async Task<int> OpenFundedAsync(string name, decimal deposit)
 {
     var opened = await http.PostAsJsonAsync("/accounts", new { holderName = name });
     var id = (await opened.Content.ReadFromJsonAsync<OpenedAccount>())!.Id;
-    (await http.PostAsJsonAsync($"/accounts/{id}/transactions", new { amount = deposit, description = "Deposit" })).EnsureSuccessStatusCode();
+    if (deposit > 0)
+    {
+        (await http.PostAsJsonAsync($"/accounts/{id}/transactions", new { amount = deposit, description = "Deposit" })).EnsureSuccessStatusCode();
+    }
     return id;
 }
 

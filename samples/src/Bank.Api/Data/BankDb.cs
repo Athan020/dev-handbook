@@ -10,6 +10,7 @@ public sealed class BankDb(DbContextOptions<BankDb> options) : DbContext(options
     public DbSet<RewardPoint> RewardPoints => Set<RewardPoint>();
     public DbSet<ProcessedMessage> ProcessedMessages => Set<ProcessedMessage>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+    public DbSet<IdempotencyKey> IdempotencyKeys => Set<IdempotencyKey>();
     public DbSet<StatementAccount> StatementAccounts => Set<StatementAccount>();
     public DbSet<StatementProblem> StatementProblems => Set<StatementProblem>();
 
@@ -52,6 +53,18 @@ public sealed class BankDb(DbContextOptions<BankDb> options) : DbContext(options
             processed.HasKey(p => new { p.Consumer, p.MessageId });
             processed.Property(p => p.Consumer).HasMaxLength(100);
             processed.Property(p => p.MessageId).HasMaxLength(100);
+        });
+
+        // Journey B3 stage 3.
+        model.Entity<IdempotencyKey>(key =>
+        {
+            key.ToTable("idempotency_keys");
+            key.HasKey(k => new { k.PayerAccountId, k.Key });
+            key.Property(k => k.Key).HasMaxLength(100);
+            key.Property(k => k.RequestHash).HasMaxLength(64);
+            key.Property(k => k.Response).HasColumnType("jsonb");
+            // Old keys are deleted in batches by age.
+            key.HasIndex(k => k.CreatedAt);
         });
 
         model.Entity<OutboxMessage>(outbox =>

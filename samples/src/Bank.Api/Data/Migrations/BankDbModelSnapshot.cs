@@ -73,6 +73,44 @@ namespace Bank.Api.Data.Migrations
                     b.ToTable("accounts", (string)null);
                 });
 
+            modelBuilder.Entity("Bank.Api.Data.IdempotencyKey", b =>
+                {
+                    b.Property<int>("PayerAccountId")
+                        .HasColumnType("integer")
+                        .HasColumnName("payer_account_id");
+
+                    b.Property<string>("Key")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("key");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("request_hash");
+
+                    b.Property<string>("Response")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("response");
+
+                    b.Property<int?>("StatusCode")
+                        .HasColumnType("integer")
+                        .HasColumnName("status_code");
+
+                    b.HasKey("PayerAccountId", "Key")
+                        .HasName("pk_idempotency_keys");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_idempotency_keys_created_at");
+
+                    b.ToTable("idempotency_keys", (string)null);
+                });
+
             modelBuilder.Entity("Bank.Api.Data.OutboxMessage", b =>
                 {
                     b.Property<Guid>("Id")

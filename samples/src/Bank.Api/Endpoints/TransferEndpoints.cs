@@ -36,7 +36,7 @@ public static class TransferEndpoints
     }
 
     private static async Task<IResult> CreateTransfer(
-        TransferRequest request, BankDb db, IConfiguration config, IServiceProvider services, CancellationToken ct)
+        TransferRequest request, BankDb db, IConfiguration config, IServiceProvider services, HttpContext http, CancellationToken ct)
     {
         if (request.Amount <= 0 || request.FromAccountId == request.ToAccountId || string.IsNullOrWhiteSpace(request.Reference))
         {
@@ -54,15 +54,27 @@ public static class TransferEndpoints
 
         var outbox = config["Lab:Transfers"] == "Outbox";
 
+        // B3 stage 3: the client's Idempotency-Key header, if Lab:Idempotency uses it.
+        var key = http.Request.Headers[Idempotency.Header].ToString();
+        var keyMode = key.Length is > 0 and <= 100 ? config["Lab:Idempotency"] : null;
+        var requestHash = Idempotency.Hash(request);
+        if (keyMode == "CheckFirst" && await Idempotency.FindAsync(db, request.FromAccountId, key, ct) is { } previous)
+        {
+            return previous.RequestHash == requestHash
+                ? Replay(http, previous.StatusCode!.Value, previous.Response!)
+                : KeyMismatch();
+        }
+        var claim = keyMode == "Keys" ? (key, requestHash) : ((string, string)?)null;
+
         // #region retry-loop
         // B3: a transaction that lost a race (a serialization failure or a deadlock) is rolled
         // back. Run the whole transaction again, up to Lab:Retries times, then give up with 409.
-        TransferCompleted? transfer;
+        Recorded recorded;
         for (var attempt = 0; ; attempt++)
         {
             try
             {
-                transfer = await RecordTransferAsync(db, request, outbox, config, ct);
+                recorded = await RecordTransferAsync(db, request, outbox, config, claim, ct);
                 break;
             }
             catch (Exception e) when (Funds.IsRetryable(e))
@@ -76,7 +88,15 @@ public static class TransferEndpoints
         }
         // #endregion retry-loop
 
-        if (transfer is null)
+        switch (recorded.Previous)
+        {
+            case Idempotency.Claim.Replay replay:
+                return Replay(http, replay.StatusCode, replay.Response);
+            case Idempotency.Claim.Mismatch:
+                return KeyMismatch();
+        }
+
+        if (recorded.Transfer is not { } transfer)
         {
             return Results.Problem(statusCode: StatusCodes.Status422UnprocessableEntity, title: "Insufficient funds.");
         }
@@ -85,6 +105,11 @@ public static class TransferEndpoints
         if (Random.Shared.NextDouble() < config.GetValue("Lab:CrashAfterCommit", 0.0))
         {
             Process.GetCurrentProcess().Kill();
+        }
+
+        if (keyMode == "CheckFirst")
+        {
+            await Idempotency.RecordAfterwardsAsync(db, request.FromAccountId, key, requestHash, StatusCodes.Status201Created, transfer, ct);
         }
 
         switch (config["Lab:Transfers"])
@@ -134,6 +159,18 @@ public static class TransferEndpoints
         return Results.Created($"/transfers/{transfer.TransferId}", transfer);
     }
 
+    private static IResult Replay(HttpContext http, int statusCode, string response)
+    {
+        http.Response.Headers[Idempotency.ReplayedHeader] = "true";
+        return Results.Content(response, "application/json", statusCode: statusCode);
+    }
+
+    private static IResult KeyMismatch() => Results.Problem(
+        statusCode: StatusCodes.Status422UnprocessableEntity,
+        title: "This Idempotency-Key was already used with a different request.");
+
+    private sealed record Recorded(TransferCompleted? Transfer, Idempotency.Claim? Previous = null);
+
     /// <summary>
     /// B2 stage 5: opens an account and saves an AccountOpened event in the outbox, in one
     /// transaction. The relay publishes it when Lab:Transfers=Outbox.
@@ -166,14 +203,24 @@ public static class TransferEndpoints
     /// Records the debit and the credit in one database transaction. Journey B3 adds the checks
     /// that make it safe to move money (see Funds): returns null if the account can't afford it.
     /// </summary>
-    private static async Task<TransferCompleted?> RecordTransferAsync(
-        BankDb db, TransferRequest request, bool outbox, IConfiguration config, CancellationToken ct)
+    private static async Task<Recorded> RecordTransferAsync(
+        BankDb db, TransferRequest request, bool outbox, IConfiguration config, (string Key, string Hash)? claim, CancellationToken ct)
     {
         await using var dbTransaction = await db.Database.BeginTransactionAsync(Funds.Isolation(config), ct);
 
+        // #region claim-in-transaction
+        // B3 stage 3 (Lab:Idempotency=Keys): claim the key first, in this transaction. A key
+        // that's already been used means "this payment was already made": answer as before.
+        if (claim is var (key, hash) && await Idempotency.ClaimAsync(db, request.FromAccountId, key, hash, ct) is var claimed
+            && claimed is not Idempotency.Claim.New)
+        {
+            return new Recorded(null, claimed);
+        }
+        // #endregion claim-in-transaction
+
         if (config["Lab:Funds"] == "CheckSum" && !await Funds.HasFundsAsync(db, request.FromAccountId, request.Amount, ct))
         {
-            return null; // nothing written; disposing the transaction rolls it back
+            return new Recorded(null); // nothing written; disposing the transaction rolls it back
         }
 
         // B3 stage 2: Lab:LockLate=true writes everything else first and changes the balances
@@ -181,7 +228,7 @@ public static class TransferEndpoints
         var lockLate = config.GetValue("Lab:LockLate", false);
         if (!lockLate && !await Funds.MoveAsync(db, request, config, ct))
         {
-            return null; // the stored balance can't cover it; rolling back undoes any change made
+            return new Recorded(null); // the stored balance can't cover it; rolling back undoes any change made
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -235,12 +282,18 @@ public static class TransferEndpoints
         // Everything else is written; now lock and change the balances, and commit straight away.
         if (lockLate && !await Funds.MoveAsync(db, request, config, ct))
         {
-            return null; // rolling back also removes the rows written above
+            return new Recorded(null); // rolling back also removes the rows written above
         }
         // #endregion lock-late
 
+        if (claim is var (claimedKey, _))
+        {
+            // The response goes in with the key, so a retry gets exactly this answer.
+            await Idempotency.CompleteAsync(db, request.FromAccountId, claimedKey, StatusCodes.Status201Created, transfer, ct);
+        }
+
         await dbTransaction.CommitAsync(ct);
-        return transfer;
+        return new Recorded(transfer);
     }
 }
 
