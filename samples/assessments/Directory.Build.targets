@@ -11,8 +11,8 @@
     <Compile Remove="Reference/**" />
   </ItemGroup>
 
-  <!-- Test helpers shared by every set. -->
-  <ItemGroup>
+  <!-- Test helpers shared by every test project. Projects that aren't tests set SharedTestHelpers to false. -->
+  <ItemGroup Condition="'$(SharedTestHelpers)' != 'false'">
     <Compile Include="$(MSBuildThisFileDirectory)Shared/*.cs" Link="Shared/%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

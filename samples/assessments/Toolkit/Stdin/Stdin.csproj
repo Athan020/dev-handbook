@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- A complete standard-input program, the shape some assessment questions expect. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <SharedTestHelpers>false</SharedTestHelpers>
+  </PropertyGroup>
+</Project>
