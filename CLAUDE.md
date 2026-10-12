@@ -25,7 +25,7 @@ A VitePress site for building T-shaped software engineering skills, organised by
 
 - Work **one phase at a time**, in the order given in `PLAN.md` §10. Before starting a phase, propose a short plan. At the end of a phase, stop, summarise what changed, list anything uncertain, and wait for approval.
 - Update the **Status** line at the top of `PLAN.md` when a phase starts or finishes.
-- Before writing a journey that only has a draft outline (B3–B7, F1–F6), propose its full stage table and capstone and get approval.
+- Before writing a journey that only has a draft outline (B3–B9, F1–F6), propose its full stage table and capstone and get approval.
 - Journeys define scope. Do not add pages just because a source note exists, and do not skip a needed topic just because no note exists.
 - If the plan is ambiguous or seems wrong, ask instead of guessing.
 - Commit at logical checkpoints with clear messages. Do not push unless asked.

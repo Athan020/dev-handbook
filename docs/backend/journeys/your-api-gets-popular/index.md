@@ -36,7 +36,7 @@ flowchart TB
 
 | # | Stage | Triggered by |
 |---|---|---|
-| 1 | [Measure first](./01-measure-first): Latency percentiles, where time goes, reading a query plan | The transactions endpoint is slow at peak |
+| 1 | [Measure first](./01-measure-first): Latency percentiles, where time goes (app, database or network), reading a query plan | The transactions endpoint is slow at peak |
 | 2 | [Indexes and query shape](./02-indexes-and-query-shape): Composite, covering, selectivity, SARGable queries | The plan shows a full scan |
 | 3 | [What is the ORM doing?](./03-what-is-the-orm-doing): N+1, over-fetching, offset vs keyset pagination | Indexed, but still hundreds of queries per request |
 | 4 | [Too many connections](./04-too-many-connections): Pool exhaustion, async all the way, timeouts | Fast queries, but requests queue under load |
@@ -51,7 +51,7 @@ This journey assumes HTTP and REST, SQL basics (joins, filtering, grouping) and 
 
 ## By the end you'll be able to
 
-- Find where request time actually goes before changing anything.
+- Find where request time actually goes (app, database or network) before changing anything.
 - Read a query plan and choose an index that fixes it.
 - Spot N+1 queries and over-fetching, and choose a pagination strategy.
 - Explain connection-pool exhaustion and how to avoid it.

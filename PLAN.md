@@ -3,7 +3,7 @@
 > A VitePress site for building **T-shaped** software engineering skills, organised by orientation (frontend or backend). It is meant to help engineers grow in their current role and prepare for multi-round interviews. It teaches judgement: creative problem solving that still respects good practice.
 
 **Plan version:** v2 (journey-based). Supersedes v1, which was topic-based and migration-first. See §9.
-**Status:** Phase 0 complete and approved (2026-10-11). Paused. **Resume at Phase 1** (not started); see the open items in §11 first.
+**Status:** Phase 0 complete and approved (2026-10-11). Backend journeys extended to B1–B9 (2026-10-12). **Resume at Phase 1** (not started); see the open items in §11 first.
 **Owner:** Athan
 **Source material:** `_source/backend-engineer-kb/` is a **quarry, not a blueprint**. See §6.
 
@@ -94,7 +94,7 @@ docs/
 
 | # | Stage | Triggered by |
 |---|---|---|
-| 1 | Measure first: latency percentiles, where time goes, reading a query plan | "The transactions endpoint is slow at peak" |
+| 1 | Measure first: latency percentiles, where time goes (app, database or network), reading a query plan | "The transactions endpoint is slow at peak" |
 | 2 | Indexes and query shape: composite, covering, selectivity, SARGable queries | The plan shows a full scan |
 | 3 | What is the ORM doing? N+1, over-fetching, offset vs keyset pagination | Indexed, but still hundreds of queries per request |
 | 4 | Too many connections: pool exhaustion, async all the way, timeouts | Fast queries, but requests queue under load |
@@ -118,15 +118,19 @@ docs/
 
 **B3 — The money must add up** *(Phase 4)*: transactions and isolation anomalies (lost update, write skew), optimistic vs pessimistic concurrency, idempotency keys on the API, double-entry ledgers, reconciliation. Capstone: *design a transfer between accounts*.
 
-**B4 — Things fail** *(Phase 4)*: timeouts, retries with backoff and jitter, circuit breakers and bulkheads, graceful degradation, rate limiting. Capstone: *design a rate limiter*.
+**B4 — Things fail** *(Phase 4)*: timeouts (connect vs request timeouts, propagating deadlines between services), retries with backoff and jitter, circuit breakers and bulkheads, graceful degradation, rate limiting. Capstone: *design a rate limiter*.
 
 **B5 — One service becomes many** *(Phase 4)*: modular monolith first, boundaries (bounded contexts), data ownership, sync vs async between services, sagas, API gateways, strangler-fig migration. Capstone: *migrate a capability out of a monolith*.
 
-**B6 — You shipped it, now what?** *(Phase 4)*: logs, metrics and traces, SLOs, deployment strategies, feature flags, containers and autoscaling as needed, an incident walkthrough. Capstone: *"Latency doubled after a deploy — walk me through it"*.
+**B6 — Shipping it safely** *(Phase 4)*: triggered by "a deploy took the site down for 20 minutes". A pipeline you can trust (build, test, artifacts), environments and configuration, infrastructure as code (drift, review), database migrations without downtime (expand, then contract), deployment strategies (rolling, blue-green, canary), feature flags, rollbacks. Capstone: *ship a breaking schema change to the transfer API with zero downtime*.
 
-**B7 — Someone is trying to break it** *(Phase 4)*: authentication and authorisation (OAuth 2.0 and OIDC, JWT pitfalls), common web vulnerabilities, secrets handling, network boundaries. Capstone: *threat-model the transfer API*.
+**B7 — Where your code actually runs** *(Phase 4)*: triggered by "it's fast on my laptop and slow in production". Where the latency goes on the path from client to process (DNS, TLS, load balancer), connection reuse and `HttpClient` socket exhaustion, CPU-bound vs I/O-bound work and thread-pool starvation, memory and garbage collection, container resource limits (CPU throttling, out-of-memory kills), VMs vs containers vs serverless (cold starts), scaling up vs out and what autoscaling should react to. Networking fundamentals (HTTP, DNS, TCP) go in the core self-check with links out, not in the stages. Capstone: *"Users in another region see 2-second responses — trace the path"*.
 
-Stage lists for B3–B7 are drafts. Propose the full stage table for a journey and get it approved before writing it.
+**B8 — Something is wrong in production** *(Phase 4)*: triggered by "support says the transfer page is slow, sometimes". What to instrument and why (logs, metrics, traces), SLOs and alerts that mean something, a troubleshooting method (reproduce, isolate, find what changed), diagnosing performance degradation (USE and RED checklists, profiling with the .NET diagnostic tools), defect triage (severity vs priority, minimal reproduction, regression or long-standing, `git bisect`), running an incident (mitigate first), a postmortem that changes something. Capstone: *"Latency doubled after a deploy — walk me through it"*.
+
+**B9 — Someone is trying to break it** *(Phase 4)*: authentication and authorisation (OAuth 2.0 and OIDC, JWT pitfalls), common web vulnerabilities, secrets handling, network boundaries (building on B7). Capstone: *threat-model the transfer API*.
+
+Stage lists for B3–B9 are drafts. Propose the full stage table for a journey and get it approved before writing it.
 
 ### Frontend (outline in Phase 5)
 
@@ -208,7 +212,7 @@ Each phase ends with a review stop. Claude Code finishes the phase, summarises w
 ### Phase 0 — Scaffold (adjust to v2)
 
 - Repo setup: `package.json`, VitePress, the Mermaid plugin, `.gitignore`, `.editorconfig`.
-- Create the `docs/` structure from §4 with stub pages. For backend, add stub journey folders for B1 and B2 only, each with an `index.md` that shows the premise and stage table from §5. List B3–B7 on the backend index as "coming later". Do not create stub pages for them.
+- Create the `docs/` structure from §4 with stub pages. For backend, add stub journey folders for B1 and B2 only, each with an `index.md` that shows the premise and stage table from §5. List the later journeys (now B3–B9) on the backend index as "coming later". Do not create stub pages for them.
 - Landing page: VitePress home layout with hero actions **Backend** and **Frontend**, and a short explanation of the journey idea and the T model.
 - Sidebars per section (`/backend/`, `/frontend/`, `/interviews/`, `/guide/`), with backend journeys grouped and stages in order.
 - Custom containers `interview` and `trap`.
@@ -266,11 +270,11 @@ Link to each platform's official candidate help pages instead of restating their
 
 **Done when:** every page exists, the practice harnesses run with `dotnet test`, and nothing duplicates standard LeetCode pattern guides beyond a short pattern map that links out.
 
-### Phase 4 — Backend journeys B3–B7
+### Phase 4 — Backend journeys B3–B9
 
-Order: **B3 → B4 → B5 → B6 → B7.** For each journey, first propose the full stage table and capstone and get approval, then write it. Create `backend/reference/` pages only when two or more journeys need the same concept, for example idempotency (B2, B3, B4).
+Order: **B3 → B4 → B5 → B6 → B7 → B8 → B9.** For each journey, first propose the full stage table and capstone and get approval, then write it. Create `backend/reference/` pages only when two or more journeys need the same concept, for example idempotency (B2, B3, B4) and a troubleshooting method (B1, B4, B7, B8). Where they help, B7 and B8 use the Phase 1 interactive patterns: a container-throttling simulator, an "investigate this incident" exercise where the reader chooses what to check next, and a defect-triage ranking exercise. Add networking basics (HTTP, DNS, TCP) to `backend/core-self-check.md` before writing B7.
 
-**Done when:** all backend journeys are written and the interview stages page links each round to the journeys that prepare for it.
+**Done when:** all backend journeys are written and the interview stages page links each round to the journeys that prepare for it, including debugging and production-support rounds (B7, B8).
 
 ### Phase 5 — Frontend track (outline)
 

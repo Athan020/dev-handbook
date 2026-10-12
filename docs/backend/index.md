@@ -14,7 +14,7 @@ Each journey applies one kind of pressure and follows it outward, one stage at a
 
 The stem is what you're expected to own: HTTP and API design, SQL and data modelling, and your language and framework in depth. The [core self-check](./core-self-check) lists what the journeys assume, with links out for anything you need to brush up.
 
-The bar is everything around that core which senior work and senior interviews push into: databases at scale, messaging, consistency, failure, architecture, operations and security. The journeys below cover the bar.
+The bar is everything around that core which senior work and senior interviews push into: databases at scale, messaging, consistency, failure, architecture, delivery, compute and networking, production diagnostics and security. The journeys below cover the bar.
 
 ## Journeys
 
@@ -26,10 +26,12 @@ The bar is everything around that core which senior work and senior interviews p
 ### Coming later
 
 - **B3: The money must add up.** Transactions and isolation anomalies, optimistic vs pessimistic concurrency, idempotency keys, double-entry ledgers, reconciliation.
-- **B4: Things fail.** Timeouts, retries with backoff and jitter, circuit breakers and bulkheads, graceful degradation, rate limiting.
+- **B4: Things fail.** Timeouts and deadlines, retries with backoff and jitter, circuit breakers and bulkheads, graceful degradation, rate limiting.
 - **B5: One service becomes many.** Modular monolith first, bounded contexts, data ownership, sync vs async between services, sagas, API gateways, strangler-fig migration.
-- **B6: You shipped it, now what?** Logs, metrics and traces, SLOs, deployment strategies, feature flags, an incident walkthrough.
-- **B7: Someone is trying to break it.** OAuth 2.0 and OIDC, JWT pitfalls, common web vulnerabilities, secrets handling, network boundaries.
+- **B6: Shipping it safely.** Pipelines, environments, infrastructure as code, zero-downtime database migrations, deployment strategies, feature flags, rollbacks.
+- **B7: Where your code actually runs.** The request path from client to process, connection reuse, CPU, memory and thread-pool limits, containers vs VMs vs serverless, scaling.
+- **B8: Something is wrong in production.** What to instrument, SLOs and alerts, a troubleshooting method, diagnosing performance degradation, defect triage, incidents and postmortems.
+- **B9: Someone is trying to break it.** OAuth 2.0 and OIDC, JWT pitfalls, common web vulnerabilities, secrets handling, network boundaries.
 
 ## Suggested order
 

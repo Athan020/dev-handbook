@@ -11,7 +11,7 @@ status: draft
 
 **Triggered by:** The transactions endpoint is slow at peak.
 
-**Covers:** Latency percentiles, where time goes, reading a query plan.
+**Covers:** Latency percentiles, where time goes (app, database or network), reading a query plan.
 
 ::: info Coming soon
 This page is a placeholder. Content arrives in a later phase.
