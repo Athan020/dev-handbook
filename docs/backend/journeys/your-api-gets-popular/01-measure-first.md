@@ -230,7 +230,7 @@ No. For small tables, or queries that need a large share of the rows, reading ev
 
 The lab runs against the sample banking API on your machine. From the `samples` folder of the repository (see its README for prerequisites):
 
-1. **Start and seed it.** Seeding generates 10 million transactions and takes about a minute.
+1. **Start and seed it.** Seeding generates 10 million transactions and takes one to three minutes.
 
    ```sh
    docker compose up -d

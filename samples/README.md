@@ -13,7 +13,7 @@ From this folder:
 
 ```sh
 docker compose up -d                            # Postgres on localhost:5433
-dotnet run --project src/Bank.Api -- seed       # schema plus 10M transactions, about a minute
+dotnet run --project src/Bank.Api -- seed       # schema plus 10M transactions, one to three minutes
 dotnet run --project src/Bank.Api               # API on http://localhost:5080
 ```
 

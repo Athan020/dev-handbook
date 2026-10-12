@@ -2,7 +2,7 @@
 title: "B1: Your API gets popular"
 track: backend
 journey: your-api-gets-popular
-status: draft
+status: written
 ---
 
 # B1: Your API gets popular

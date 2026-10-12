@@ -11,7 +11,8 @@ if [ ! -s "$PGDATA/PG_VERSION" ]; then
     mkdir -p "$PGDATA"
     chown -R postgres:postgres /var/lib/postgresql
     chmod 700 "$PGDATA"
-    gosu postgres pg_basebackup -h postgres -U bank -D "$PGDATA" -X stream -R --progress
+    # --checkpoint=fast: start now, rather than waiting minutes for a spread checkpoint.
+    gosu postgres pg_basebackup -h postgres -U bank -D "$PGDATA" -X stream -R --checkpoint=fast --progress
 fi
 
 exec gosu postgres postgres -D "$PGDATA" \

@@ -198,7 +198,7 @@ Customers record transactions, and half of them read their account back shortly 
 
 The replica runs only when you ask for it, with the `replica` profile. From the `samples` folder:
 
-1. **Start the replica.** On first start it clones the primary; ours took about 25 seconds for the full 10-million-row database. Then check it's streaming:
+1. **Start the replica.** On first start it clones the primary; ours took under 10 seconds for the full 10-million-row database. Then check it's streaming:
 
    ```sh
    docker compose --profile replica up -d

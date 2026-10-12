@@ -4,8 +4,8 @@
 -- Account ids are drawn from random()^3, so low ids get far more transactions. With
 -- 100,000 accounts, account 1 gets about 2% of all rows and the busiest 1% of accounts
 -- get about 20%. created_at rises with the row number, as it does in an append-only
--- table. Each row is one kind: salary (5%), incoming transfer (10%), outgoing transfer
--- (25%) or spending (60%); only transfers have a counterparty.
+-- table, and never passes now(). Each row is one kind: salary (5%), incoming transfer
+-- (10%), outgoing transfer (25%) or spending (60%); only transfers have a counterparty.
 INSERT INTO transactions (account_id, counterparty_account_id, amount, description, created_at)
 SELECT
     account_id,
@@ -35,7 +35,8 @@ FROM (
             random() AS k,
             random() AS r_amount,
             random() AS r_other,
-            now() - interval '2 years' + (n::double precision / {transactions}) * interval '2 years' + random() * interval '1 hour' AS created_at
+            -- Up to an hour of jitter, all in the past: no transaction is dated after now().
+            now() - interval '2 years' + (n::double precision / {transactions}) * interval '2 years' - random() * interval '1 hour' AS created_at
         FROM generate_series({start}, {end}) AS n
     ) AS raw
 ) AS generated;

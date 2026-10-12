@@ -35,6 +35,17 @@ public sealed class SeedDataTests(BankApiFixture fixture) : IClassFixture<BankAp
     }
 
     [Fact]
+    public async Task No_seeded_transaction_is_dated_in_the_future()
+    {
+        await using var scope = fixture.App.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<BankDb>();
+
+        var latest = await db.Transactions.MaxAsync(t => t.CreatedAt, Ct);
+
+        Assert.True(latest <= DateTimeOffset.UtcNow, $"latest seeded transaction is {latest:O}");
+    }
+
+    [Fact]
     public async Task Seeding_twice_does_not_duplicate_data()
     {
         await using var scope = fixture.App.Services.CreateAsyncScope();
