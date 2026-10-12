@@ -3,7 +3,7 @@
 > A VitePress site for building **T-shaped** software engineering skills, organised by orientation (frontend or backend). It is meant to help engineers grow in their current role and prepare for multi-round interviews. It teaches judgement: creative problem solving that still respects good practice.
 
 **Plan version:** v2 (journey-based). Supersedes v1, which was topic-based and migration-first. See §9.
-**Status:** Phase 2 complete, awaiting review (2026-10-12). Phase 1 complete and approved (2026-10-12).
+**Status:** Phase 2 complete and approved (2026-10-12). Phase 3 not started.
 **Owner:** Athan
 **Source material:** `_source/backend-engineer-kb/` is a **quarry, not a blueprint**. See §6.
 
