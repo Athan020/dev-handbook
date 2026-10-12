@@ -147,8 +147,10 @@ public static class AccountEndpoints
     // id DESC), every page costs the same, however deep, and new transactions arriving
     // between requests can't shift rows onto the next page.
     private static async Task<IResult> GetTransactionFeed(
-        int id, BankDb db, CancellationToken ct, int pageSize = 20, string? cursor = null)
+        int id, HttpContext http, ReadRouting routing, CancellationToken ct, int pageSize = 20, string? cursor = null)
     {
+        var db = await routing.ChooseAsync(http, ct);
+
         if (pageSize < 1 || pageSize > MaxPageSize)
         {
             return Results.ValidationProblem(new Dictionary<string, string[]>

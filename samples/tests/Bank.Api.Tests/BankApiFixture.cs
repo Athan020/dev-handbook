@@ -24,7 +24,11 @@ public sealed class BankApiFixture : IAsyncLifetime
         await _postgres.StartAsync();
 
         App = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(host => host.UseSetting("ConnectionStrings:Bank", ConnectionString));
+            .WithWebHostBuilder(host => host
+                .UseSetting("ConnectionStrings:Bank", ConnectionString)
+                // No real replica in tests: the "replica" is the primary, which Postgres reports
+                // as not replaying anything, so consistency tokens always route to the primary.
+                .UseSetting("ConnectionStrings:BankReplica", ConnectionString));
 
         await using var scope = App.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<BankDb>();

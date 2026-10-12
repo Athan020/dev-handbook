@@ -80,3 +80,25 @@ test.describe('cache stampede simulator', () => {
     expect(await statNumber(sim, 'oldest')).toBeGreaterThan(5000)
   })
 })
+
+test.describe('read replica simulator', () => {
+  const url = '/backend/journeys/your-api-gets-popular/06-read-replicas'
+
+  test('reading everything from the replica hides customers’ own writes', async ({ page }) => {
+    const sim = await runScenario(page, url, 'Replica for everything', 10)
+    expect(await statNumber(sim, 'primary')).toBe(0)
+    expect(await statNumber(sim, 'stale')).toBeGreaterThan(20)
+  })
+
+  test('a sticky window protects read-backs with little primary load', async ({ page }) => {
+    const sim = await runScenario(page, url, 'Sticky for 5 s', 10)
+    expect(await statNumber(sim, 'stale')).toBe(0)
+    expect(await statNumber(sim, 'primary')).toBeLessThan(15)
+  })
+
+  test('a consistency token stays correct through lag spikes', async ({ page }) => {
+    const sim = await runScenario(page, url, 'Token, with lag spikes', 20)
+    expect(await statNumber(sim, 'stale')).toBe(0)
+    expect(await statNumber(sim, 'primary')).toBeLessThan(15)
+  })
+})

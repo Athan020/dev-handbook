@@ -52,6 +52,7 @@ To seed less data on a slower machine: `dotnet run --project src/Bank.Api -- see
   - `--Lab:Transactions=Naive|Projected|Blocking` for the transactions page (default `Naive`)
   - `--Lab:Summary=None|CacheAside|Hybrid` and `--Lab:CacheSeconds=30` for the summary (default `None`)
   - `"--ConnectionStrings:Bank=Host=localhost;Port=5433;Database=bank;Username=bank;Password=bank;Maximum Pool Size=10"` to change the connection pool
+- **A read replica.** `docker compose --profile replica up -d` starts a streaming replica on port 5434 (it clones the primary on first start). `REPLICA_DELAY=2000 docker compose --profile replica up -d` makes it apply changes 2 seconds late. Route reads with `--Lab:Reads=Primary|Replica|ReadYourWrites`; responses say who served them in `X-Served-By`, and writes return an `X-Consistency-Token`.
 - **A second instance.** `dotnet run --project src/Bank.Api --no-launch-profile -- --urls http://localhost:5081` runs another copy on port 5081.
 - **Seeing the SQL.** Add `--Logging:LogLevel:Microsoft.EntityFrameworkCore.Database.Command=Information` to log every query EF runs, with its duration.
 - **Query statistics.** Postgres records every query's call count and time in `pg_stat_statements`. Enable it once with `docker compose exec postgres psql -U bank -d bank -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements"`.

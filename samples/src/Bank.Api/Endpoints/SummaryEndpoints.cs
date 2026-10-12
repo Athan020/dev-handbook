@@ -30,8 +30,11 @@ public static class SummaryEndpoints
     private static string CacheKey(int accountId) => $"account-summary:{accountId}";
 
     private static async Task<IResult> GetSummary(
-        int id, BankDb db, IConfiguration config, IMemoryCache memory, HybridCache hybrid, CancellationToken ct)
+        int id, HttpContext http, ReadRouting routing, IConfiguration config, IMemoryCache memory, HybridCache hybrid,
+        CancellationToken ct)
     {
+        // Stage 6: which database serves this read (the primary unless Lab:Reads says otherwise).
+        var db = await routing.ChooseAsync(http, ct);
         var ttl = TimeSpan.FromSeconds(config.GetValue("Lab:CacheSeconds", 30));
         var summary = config["Lab:Summary"] switch
         {
@@ -108,7 +111,8 @@ public static class SummaryEndpoints
     /// and replicas catch up. This is not how to move money safely; journey B3 covers that.
     /// </summary>
     private static async Task<IResult> AddTransaction(
-        int id, NewTransaction input, BankDb db, IMemoryCache memory, HybridCache hybrid, CancellationToken ct)
+        int id, NewTransaction input, HttpContext http, BankDb db, IMemoryCache memory, HybridCache hybrid,
+        CancellationToken ct)
     {
         if (input.Amount == 0 || string.IsNullOrWhiteSpace(input.Description) || input.Description.Length > 200)
         {
@@ -140,6 +144,10 @@ public static class SummaryEndpoints
         memory.Remove(CacheKey(id));
         await hybrid.RemoveAsync(CacheKey(id), ct);
         // #endregion invalidate
+
+        // Stage 6: hand the client the primary's WAL position after this commit, so its next
+        // read can wait for a replica that has caught up (see ReadRouting).
+        http.Response.Headers[ReadRouting.TokenHeader] = await ReadRouting.CurrentLsnAsync(db, ct);
 
         return Results.Created(
             $"/accounts/{id}/transactions/{transaction.Id}",

@@ -8,6 +8,13 @@ builder.Services.AddDbContext<BankDb>(options => options
     .UseNpgsql(builder.Configuration.GetConnectionString("Bank"))
     // snake_case tables and columns (account_id, not "AccountId"), as is usual in Postgres.
     .UseSnakeCaseNamingConvention());
+
+// The read replica (B1 stage 6). Only used when Lab:Reads asks for it.
+builder.Services.AddSingleton(new ReplicaOptions(new DbContextOptionsBuilder<BankDb>()
+    .UseNpgsql(builder.Configuration.GetConnectionString("BankReplica"))
+    .UseSnakeCaseNamingConvention()
+    .Options));
+builder.Services.AddScoped<ReadRouting>();
 builder.Services.AddProblemDetails();
 builder.Services.AddMemoryCache();
 builder.Services.AddHybridCache();
