@@ -1,0 +1,43 @@
+# Handbook samples
+
+The labs for the backend journeys run against one small banking API: accounts and their transactions, stored in Postgres. Each stage's lab measures or changes this app.
+
+## What you need
+
+- [.NET 10 SDK](https://dotnet.microsoft.com/download)
+- Docker, with Docker Compose
+
+## Start it
+
+From this folder:
+
+```sh
+docker compose up -d                            # Postgres on localhost:5433
+dotnet run --project src/Bank.Api -- seed       # schema plus 10M transactions, about a minute
+dotnet run --project src/Bank.Api               # API on http://localhost:5080
+```
+
+Then try it:
+
+```sh
+curl "http://localhost:5080/accounts/1"
+curl "http://localhost:5080/accounts/1/transactions?page=1&pageSize=20"
+```
+
+To start again from scratch, run `docker compose down -v` (this deletes the data), then repeat the steps above.
+
+To seed less data on a slower machine: `dotnet run --project src/Bank.Api -- seed --transactions 2000000`. The labs assume the default, so query plans and timings will differ from the pages.
+
+## What you get
+
+- **A starting point that works in development.** The API is correct, but it was written without thinking about scale. Journey B1 measures it and improves it one stage at a time.
+- **Only primary keys are indexed.** Choosing the other indexes is part of B1 stage 2.
+- **Realistic, deterministic data.** 100,000 accounts and 10 million transactions over two years. A few accounts are very busy: account 1 has about 2% of all transactions, and the busiest 1% of accounts have about 20%. The median account has around 50. The data is generated from a fixed seed, so everyone gets the same rows and the same query plans.
+
+## Tests
+
+```sh
+dotnet test --solution Samples.sln
+```
+
+The integration tests start their own throwaway Postgres in Docker, so Docker must be running. They don't touch the lab database.

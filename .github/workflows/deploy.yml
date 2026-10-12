@@ -37,6 +37,19 @@ jobs:
             test-results/
           retention-days: 14
 
+  samples:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Build samples
+        run: dotnet build samples/Samples.sln
+      # Integration tests start Postgres with Testcontainers (Docker is available on the runner).
+      - name: Test samples
+        run: dotnet test --solution samples/Samples.sln
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -59,7 +72,7 @@ jobs:
 
   deploy:
     if: github.event_name != 'pull_request'
-    needs: [test, build]
+    needs: [test, samples, build]
     runs-on: ubuntu-latest
     permissions:
       pages: write

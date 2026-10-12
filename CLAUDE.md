@@ -11,7 +11,8 @@ A VitePress site for building T-shaped software engineering skills, organised by
 - `npm run docs:preview`: preview the build
 - `npm run test:e2e`: build, then run the Playwright browser tests (diagrams render in both themes, navigation, every page loads cleanly). Diagram screenshots land in `test-results/diagrams/` for review. First run: `npx playwright install chromium`.
 - `docker compose up -d` (in `samples/`): start Postgres and, from Phase 2, RabbitMQ for the labs
-- `dotnet build samples/` and `dotnet test samples/`: compile and test the runnable samples
+- `dotnet run --project samples/src/Bank.Api -- seed`: create the schema and seed 10M transactions (about a minute; `docker compose down -v` to start over)
+- `dotnet build samples/Samples.sln` and `dotnet test --solution samples/Samples.sln`: compile and test the samples (the tests need Docker running)
 
 ## Layout
 
