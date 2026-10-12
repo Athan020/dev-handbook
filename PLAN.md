@@ -3,7 +3,7 @@
 > A VitePress site for building **T-shaped** software engineering skills, organised by orientation (frontend or backend). It is meant to help engineers grow in their current role and prepare for multi-round interviews. It teaches judgement: creative problem solving that still respects good practice.
 
 **Plan version:** v2 (journey-based). Supersedes v1, which was topic-based and migration-first. See §9.
-**Status:** Phase 0 complete and approved (2026-10-11). Backend journeys extended to B1–B9 (2026-10-12). **Resume at Phase 1** (not started); see the open items in §11 first.
+**Status:** Phase 1 in progress (started 2026-10-12). Phase 0 complete and approved (2026-10-11).
 **Owner:** Athan
 **Source material:** `_source/backend-engineer-kb/` is a **quarry, not a blueprint**. See §6.
 
@@ -166,7 +166,7 @@ When writing a stage:
 title: Too many connections
 track: backend            # backend | frontend
 journey: your-api-gets-popular
-stage: 4
+stage: 4                  # 1–7, or `capstone` for the capstone page
 level: intermediate       # foundation | intermediate | advanced
 sources: [05-databases/query-optimization.md]   # _source notes consulted, if any
 status: draft             # draft | written | reviewed
@@ -225,7 +225,7 @@ Each phase ends with a review stop. Claude Code finishes the phase, summarises w
 ### Phase 1 — Stage template and journey B1 "Your API gets popular"
 
 1. Write `docs/guide/how-journeys-work.md`, `docs/guide/module-format.md` and `docs/_templates/stage.md`.
-2. Create `samples/` as a .NET 8 solution: a small transactions API (EF Core plus Postgres in Docker Compose) seeded with enough data, millions of rows, to make performance problems real. Each stage's lab changes or measures this one app.
+2. Create `samples/` as a .NET 10 (LTS) solution: a small transactions API (EF Core plus Postgres in Docker Compose) seeded with enough data, millions of rows, to make performance problems real. Each stage's lab changes or measures this one app.
 3. Write `backend/core-self-check.md` covering what B1 assumes (HTTP and REST, SQL basics, async/await), with links out.
 4. Build the interactive components B1 needs, each with Playwright tests:
    - **Commit-then-reveal** for stop-and-think questions: the reader writes an answer before the reveal opens. Once built, update §7 and `CLAUDE.md` so stop-and-think uses it instead of `::: details`.
@@ -290,13 +290,6 @@ Order: **B3 → B4 → B5 → B6 → B7 → B8 → B9.** For each journey, first
 - Accessibility and mobile pass, and a link checker in CI.
 
 ## 11. Open questions
-
-Still open from the Phase 0 review:
-
-- Capstone pages use `stage: capstone` rather than a number. Confirm or change.
-- Review the journey premises, "By the end you'll be able to" lists and capstone titles on the B1 and B2 index pages (drafted in Phase 0).
-
-General:
 
 - Hosting: GitHub Pages, or Netlify/Vercel with preview deploys?
 - Will the site be public? This affects licensing and how much personal context is included.
