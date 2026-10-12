@@ -1,6 +1,7 @@
 import DefaultTheme from 'vitepress/theme'
 import type { Theme } from 'vitepress'
 import CacheSimulator from './components/CacheSimulator.vue'
+import HashRingSimulator from './components/HashRingSimulator.vue'
 import MermaidDiagram from './components/MermaidDiagram.vue'
 import PoolSimulator from './components/PoolSimulator.vue'
 import ReplicaSimulator from './components/ReplicaSimulator.vue'
@@ -17,5 +18,6 @@ export default {
     app.component('PoolSimulator', PoolSimulator)
     app.component('CacheSimulator', CacheSimulator)
     app.component('ReplicaSimulator', ReplicaSimulator)
+    app.component('HashRingSimulator', HashRingSimulator)
   },
 } satisfies Theme

@@ -52,7 +52,7 @@ watch(isDark, render)
     <div v-if="svg" v-html="svg" />
     <div v-else-if="error" class="mermaid-error" role="alert">
       <p><strong>This diagram failed to render.</strong></p>
-      <pre>{{`` error }}</pre>
+      <pre>{{ error }}</pre>
     </div>
   </div>
 </template>

@@ -102,3 +102,42 @@ test.describe('read replica simulator', () => {
     expect(await statNumber(sim, 'primary')).toBeLessThan(15)
   })
 })
+
+test.describe('sharding simulator', () => {
+  const url = '/backend/journeys/your-api-gets-popular/07-partitioning-and-sharding'
+
+  async function addShardWith(page: Page, method: 'modulo' | 'ring') {
+    await page.goto(url)
+    const sim = page.locator('.simulator').first()
+    await sim.getByLabel('Choose a shard by').selectOption(method)
+    await sim.getByRole('button', { name: 'Add a shard' }).click()
+    return sim
+  }
+
+  test('modulo moves most accounts when a shard is added', async ({ page }) => {
+    const sim = await addShardWith(page, 'modulo')
+    expect(await statNumber(sim, 'moved')).toBeGreaterThan(70)
+  })
+
+  test('a ring moves about a fair share', async ({ page }) => {
+    const sim = await addShardWith(page, 'ring')
+    const moved = await statNumber(sim, 'moved')
+    expect(moved).toBeGreaterThan(14)
+    expect(moved).toBeLessThan(28)
+  })
+
+  test('one virtual node per shard makes the load very uneven', async ({ page }) => {
+    await page.goto(url)
+    const sim = page.locator('.simulator').first()
+    await sim.getByLabel('Virtual nodes per shard').fill('1')
+    expect(parseFloat(await sim.locator('[data-stat="max"]').innerText())).toBeGreaterThan(1.5)
+  })
+
+  test('realistic load makes the busiest shard busier', async ({ page }) => {
+    await page.goto(url)
+    const sim = page.locator('.simulator').first()
+    const even = parseFloat(await sim.locator('[data-stat="max"]').innerText())
+    await sim.getByLabel('Load per account').check()
+    expect(parseFloat(await sim.locator('[data-stat="max"]').innerText())).toBeGreaterThan(even)
+  })
+})
