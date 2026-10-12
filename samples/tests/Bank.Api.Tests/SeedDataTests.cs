@@ -56,6 +56,6 @@ public sealed class SeedDataTests(BankApiFixture fixture) : IClassFixture<BankAp
             .SqlQuery<string>($"SELECT indexname AS \"Value\" FROM pg_indexes WHERE schemaname = 'public' AND tablename IN ('accounts', 'transactions') ORDER BY indexname")
             .ToListAsync(Ct);
 
-        Assert.Equal(["PK_accounts", "PK_transactions"], indexes);
+        Assert.Equal(["pk_accounts", "pk_transactions"], indexes);
     }
 }

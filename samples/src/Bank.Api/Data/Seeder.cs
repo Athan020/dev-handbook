@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 
 namespace Bank.Api.Data;
@@ -53,64 +54,33 @@ public static class Seeder
         await db.Database.ExecuteSqlRawAsync("SET synchronous_commit = off", ct);
 
         log.WriteLine($"Creating {options.Accounts:N0} accounts...");
-        await db.Database.ExecuteSqlAsync($"""
-            INSERT INTO accounts ("HolderName", "Currency", "OpenedAt")
-            SELECT
-                (ARRAY['Thandi','Sipho','Aisha','Pieter','Lerato','Johan','Naledi','Ravi','Grace','Kabelo'])[1 + floor(random() * 10)::int]
-                    || ' ' ||
-                (ARRAY['Nkosi','Botha','Patel','Dlamini','Smith','Mokoena','Naidoo','van Wyk','Khumalo','Jacobs'])[1 + floor(random() * 10)::int],
-                'ZAR',
-                now() - interval '6 years' + random() * interval '3 years'
-            FROM generate_series(1, {options.Accounts})
-            """, ct);
+        await db.Database.ExecuteSqlRawAsync(Fill(ReadSql("accounts.sql"), options), ct);
 
-        // Account ids are drawn from random()^3, so low ids get far more transactions. With the
-        // default 100,000 accounts, account 1 gets about 2% of all rows and the busiest 1% of
-        // accounts get about 20%. created_at rises with the row number, as it does in an
-        // append-only table. Each row is one kind: salary (5%), incoming transfer (10%),
-        // outgoing transfer (25%) or spending (60%); only transfers have a counterparty.
+        var transactionsSql = ReadSql("transactions.sql");
         for (long start = 1; start <= options.Transactions; start += options.BatchSize)
         {
             var end = Math.Min(start + options.BatchSize - 1, options.Transactions);
-            await db.Database.ExecuteSqlAsync($"""
-                INSERT INTO transactions ("AccountId", "CounterpartyAccountId", "Amount", "Description", "CreatedAt")
-                SELECT
-                    account_id,
-                    CASE WHEN kind IN ('in', 'out') THEN 1 + floor(r_other * {options.Accounts})::int END,
-                    CASE kind
-                        WHEN 'salary' THEN round((8000 + r_amount * 42000)::numeric, 2)
-                        WHEN 'in' THEN round((50 + r_amount * 4950)::numeric, 2)
-                        WHEN 'out' THEN -round((50 + r_amount * 4950)::numeric, 2)
-                        ELSE -round((5 + r_amount * 1495)::numeric, 2)
-                    END,
-                    CASE kind
-                        WHEN 'salary' THEN 'Salary'
-                        WHEN 'in' THEN 'Incoming transfer'
-                        WHEN 'out' THEN 'Transfer'
-                        ELSE (ARRAY['Card payment','Debit order','ATM withdrawal','Airtime','Groceries','Fuel','Online purchase','Bank fee'])[1 + floor(r_other * 8)::int]
-                    END,
-                    created_at
-                FROM (
-                    SELECT
-                        account_id,
-                        CASE WHEN k < 0.05 THEN 'salary' WHEN k < 0.15 THEN 'in' WHEN k < 0.40 THEN 'out' ELSE 'spend' END AS kind,
-                        r_amount, r_other, created_at
-                    FROM (
-                        -- random() is volatile, so Postgres evaluates it per row and keeps this subquery separate.
-                        SELECT
-                            1 + floor({options.Accounts} * power(random(), 3))::int AS account_id,
-                            random() AS k,
-                            random() AS r_amount,
-                            random() AS r_other,
-                            now() - interval '2 years' + (n::double precision / {options.Transactions}) * interval '2 years' + random() * interval '1 hour' AS created_at
-                        FROM generate_series({start}, {end}) AS n
-                    ) AS raw
-                ) AS generated
-                """, ct);
+            await db.Database.ExecuteSqlRawAsync(Fill(transactionsSql, options, start, end), ct);
             log.WriteLine($"  {end:N0} / {options.Transactions:N0} transactions");
         }
 
         await db.Database.ExecuteSqlRawAsync("RESET session_replication_role", ct);
         await db.Database.ExecuteSqlRawAsync("RESET synchronous_commit", ct);
     }
+
+    // The seed SQL lives in Data/Seed/*.sql, shared with the handbook's in-browser playground.
+    // Placeholders are only ever replaced with numbers, so there's nothing to inject.
+    private static string ReadSql(string name)
+    {
+        using var stream = typeof(Seeder).Assembly.GetManifestResourceStream($"Bank.Api.Data.Seed.{name}")
+            ?? throw new InvalidOperationException($"Embedded seed script {name} not found.");
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
+    }
+
+    private static string Fill(string sql, Options options, long start = 0, long end = 0) => sql
+        .Replace("{accounts}", options.Accounts.ToString(CultureInfo.InvariantCulture))
+        .Replace("{transactions}", options.Transactions.ToString(CultureInfo.InvariantCulture))
+        .Replace("{start}", start.ToString(CultureInfo.InvariantCulture))
+        .Replace("{end}", end.ToString(CultureInfo.InvariantCulture));
 }

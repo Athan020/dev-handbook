@@ -13,6 +13,7 @@ A VitePress site for building T-shaped software engineering skills, organised by
 - `docker compose up -d` (in `samples/`): start Postgres and, from Phase 2, RabbitMQ for the labs
 - `dotnet run --project samples/src/Bank.Api -- seed`: create the schema and seed 10M transactions (about a minute; `docker compose down -v` to start over)
 - `dotnet build samples/Samples.sln` and `dotnet test --solution samples/Samples.sln`: compile and test the samples (the tests need Docker running)
+- `dotnet run --project samples/src/Bank.Api -- schema`: regenerate `Data/Seed/schema.sql` (the SQL playground's schema) after changing the model; a test fails if it's stale
 
 ## Layout
 
@@ -40,6 +41,7 @@ For each stage: search `_source/` for relevant notes, reuse only what is correct
 - Follow the stage template in `PLAN.md` §7. `_source/backend-engineer-kb/09-system-design-prep/08-troubleshoot-slow-reads.md` is the tone reference.
 - Open each stage with the trigger from the previous stage, and close it with what breaks next.
 - Write stop-and-think questions as `::: think Question?` blocks with the model answer as the body; the reader commits to an answer before it's revealed. Start new pages from `docs/_templates/stage.md` or `capstone.md`.
+- For SQL the reader should run, use a ` ```sql playground ` block: it runs against real Postgres in the browser, seeded like the lab database but smaller (5,000 accounts, 250,000 transactions). Playgrounds on one page share a database, so an index created in one is used by the next.
 - Present options as an escalation ladder, simplest and cheapest first. Always say what each option breaks and when not to use it.
 - Explain concepts in language-neutral terms. Use C# for backend code.
 - Code must compile. Wrong code appears only inside a `::: trap` block, explicitly framed as "spot the bug".

@@ -128,6 +128,11 @@ export default defineConfig({
   // _source/ and samples/ live outside docs/, so these entries are a safety net.
   srcExclude: ['**/_source/**', '**/samples/**', '_templates/**'],
 
+  vite: {
+    // PGlite loads its WebAssembly files relative to its own module, which pre-bundling breaks.
+    optimizeDeps: { exclude: ['@electric-sql/pglite'] },
+  },
+
   themeConfig: {
     nav: [
       { text: 'Guide', link: '/guide/t-shaped-skills', activeMatch: '^/guide/' },
@@ -147,12 +152,16 @@ export default defineConfig({
 
   markdown: {
     config(md) {
-      // ```mermaid blocks become <MermaidDiagram>, registered in theme/index.ts.
+      // ```mermaid blocks become <MermaidDiagram>, and ```sql playground blocks become
+      // <SqlPlayground>. Both components are registered in theme/index.ts.
       const fence = md.renderer.rules.fence!
       md.renderer.rules.fence = (tokens, idx, options, env, self) => {
         const token = tokens[idx]
-        if (token.info.trim() !== 'mermaid') return fence(tokens, idx, options, env, self)
-        return `<MermaidDiagram code="${encodeURIComponent(token.content)}" />\n`
+        const info = token.info.trim()
+        const code = encodeURIComponent(token.content)
+        if (info === 'mermaid') return `<MermaidDiagram code="${code}" />\n`
+        if (info === 'sql playground') return `<SqlPlayground code="${code}" />\n`
+        return fence(tokens, idx, options, env, self)
       }
 
       // `::: think Question?` becomes <StopAndThink>; the block body is the model answer.

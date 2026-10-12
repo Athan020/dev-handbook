@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Bank.Api.Data.Migrations
 {
     [DbContext(typeof(BankDb))]
-    [Migration("20261012054631_InitialSchema")]
+    [Migration("20261012060851_InitialSchema")]
     partial class InitialSchema
     {
         /// <inheritdoc />
@@ -29,7 +29,8 @@ namespace Bank.Api.Data.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
@@ -37,17 +38,21 @@ namespace Bank.Api.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(3)
                         .HasColumnType("character(3)")
+                        .HasColumnName("currency")
                         .IsFixedLength();
 
                     b.Property<string>("HolderName")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("holder_name");
 
                     b.Property<DateTimeOffset>("OpenedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("opened_at");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_accounts");
 
                     b.ToTable("accounts", (string)null);
                 });
@@ -56,29 +61,36 @@ namespace Bank.Api.Data.Migrations
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<int>("AccountId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("account_id");
 
                     b.Property<decimal>("Amount")
                         .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("amount");
 
                     b.Property<int?>("CounterpartyAccountId")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("counterparty_account_id");
 
                     b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
 
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("description");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_transactions");
 
                     b.ToTable("transactions", (string)null);
                 });
@@ -89,12 +101,14 @@ namespace Bank.Api.Data.Migrations
                         .WithMany()
                         .HasForeignKey("AccountId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("fk_transactions_accounts_account_id");
 
                     b.HasOne("Bank.Api.Data.Account", "CounterpartyAccount")
                         .WithMany()
                         .HasForeignKey("CounterpartyAccountId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_transactions_accounts_counterparty_account_id");
 
                     b.Navigation("Account");
 

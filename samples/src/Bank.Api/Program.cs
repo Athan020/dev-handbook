@@ -4,8 +4,10 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddDbContext<BankDb>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("Bank")));
+builder.Services.AddDbContext<BankDb>(options => options
+    .UseNpgsql(builder.Configuration.GetConnectionString("Bank"))
+    // snake_case tables and columns (account_id, not "AccountId"), as is usual in Postgres.
+    .UseSnakeCaseNamingConvention());
 builder.Services.AddProblemDetails();
 
 if (args is ["seed", ..])
@@ -31,6 +33,19 @@ if (args is ["seed", ..])
     var db = scope.ServiceProvider.GetRequiredService<BankDb>();
     db.Database.SetCommandTimeout(TimeSpan.FromMinutes(10));
     await Seeder.SeedAsync(db, options, Console.Out);
+    return;
+}
+
+// `dotnet run -- schema` writes the schema as plain SQL to Data/Seed/schema.sql. The
+// handbook's in-browser SQL playground builds its database from that file, and a test
+// checks it still matches the model.
+if (args is ["schema"])
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var db = scope.ServiceProvider.GetRequiredService<BankDb>();
+    var path = Path.Combine(app.Environment.ContentRootPath, "Data", "Seed", "schema.sql");
+    await File.WriteAllTextAsync(path, db.Database.GenerateCreateScript());
+    Console.WriteLine($"Wrote {path}");
     return;
 }
 

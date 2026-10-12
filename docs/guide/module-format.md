@@ -34,6 +34,19 @@ It's also worth asking *which* customers. Slow requests often cluster: one large
 
 :::
 
+### SQL playground
+
+Some stages let you run SQL against a real Postgres database in your browser, loaded with a smaller copy of the sample banking data. Change the query and run it again; nothing you do here can break anything. If you make a mess, reset the database.
+
+```sql playground
+EXPLAIN ANALYZE
+SELECT id, amount, description, created_at
+FROM transactions
+WHERE account_id = 42
+ORDER BY created_at DESC
+LIMIT 20;
+```
+
 ### Spot the bug
 
 Wrong code only ever appears in a block like this one, labelled as a bug to find. Code anywhere else on the site is meant to be correct and to compile.

@@ -16,43 +16,43 @@ namespace Bank.Api.Data.Migrations
                 name: "accounts",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "integer", nullable: false)
+                    id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    HolderName = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
-                    Currency = table.Column<string>(type: "character(3)", fixedLength: true, maxLength: 3, nullable: false),
-                    OpenedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                    holder_name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    currency = table.Column<string>(type: "character(3)", fixedLength: true, maxLength: 3, nullable: false),
+                    opened_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_accounts", x => x.Id);
+                    table.PrimaryKey("pk_accounts", x => x.id);
                 });
 
             migrationBuilder.CreateTable(
                 name: "transactions",
                 columns: table => new
                 {
-                    Id = table.Column<long>(type: "bigint", nullable: false)
+                    id = table.Column<long>(type: "bigint", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    AccountId = table.Column<int>(type: "integer", nullable: false),
-                    CounterpartyAccountId = table.Column<int>(type: "integer", nullable: true),
-                    Amount = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
-                    Description = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
-                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                    account_id = table.Column<int>(type: "integer", nullable: false),
+                    counterparty_account_id = table.Column<int>(type: "integer", nullable: true),
+                    amount = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
+                    description = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_transactions", x => x.Id);
+                    table.PrimaryKey("pk_transactions", x => x.id);
                     table.ForeignKey(
-                        name: "FK_transactions_accounts_AccountId",
-                        column: x => x.AccountId,
+                        name: "fk_transactions_accounts_account_id",
+                        column: x => x.account_id,
                         principalTable: "accounts",
-                        principalColumn: "Id",
+                        principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
-                        name: "FK_transactions_accounts_CounterpartyAccountId",
-                        column: x => x.CounterpartyAccountId,
+                        name: "fk_transactions_accounts_counterparty_account_id",
+                        column: x => x.counterparty_account_id,
                         principalTable: "accounts",
-                        principalColumn: "Id",
+                        principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                 });
         }
