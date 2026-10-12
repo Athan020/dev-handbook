@@ -176,7 +176,7 @@ status: draft             # draft | written | reviewed
 **Sections (in order):**
 
 1. **Where we are.** One or two sentences recapping the previous stage's fix and the new symptom it led to (the trigger).
-2. **Stop and think.** Two to four questions. Answers go in `::: details` blocks so the reader commits first.
+2. **Stop and think.** Two to four questions, each in a `::: think Question?` block. The reader writes an answer before the model answer (the block's body) is revealed.
 3. **The mental model.** First principles, with a Mermaid diagram where structure matters.
 4. **The escalation ladder.** Options from cheapest to most complex. For each: what it fixes, what it costs, what it breaks.
 5. **Trade-offs at a glance.** One table.
@@ -184,6 +184,8 @@ status: draft             # draft | written | reviewed
 7. **In the interview.** How it's usually asked, a short model answer, and three or more follow-ups with hidden answers in a `::: interview` block.
 8. **Try it.** A lab in `samples/` (Docker Compose where useful), a design prompt or a code fix.
 9. **What breaks next.** The hook into the next stage.
+
+Author templates: `docs/_templates/stage.md` and `docs/_templates/capstone.md` (excluded from the build). Nest `::: details` inside `::: trap` and `::: interview` by giving the outer block more colons (`:::::`).
 
 Journey `index.md` pages include the premise, a Mermaid stage map, prerequisites from the core self-check, and what the reader will be able to explain at the end. Capstone pages follow the interview flow (clarify, estimate, design, deep dive) and link back to the stage that covers each decision.
 

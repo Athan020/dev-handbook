@@ -38,7 +38,7 @@ For each stage: search `_source/` for relevant notes, reuse only what is correct
 
 - Follow the stage template in `PLAN.md` §7. `_source/backend-engineer-kb/09-system-design-prep/08-troubleshoot-slow-reads.md` is the tone reference.
 - Open each stage with the trigger from the previous stage, and close it with what breaks next.
-- Put answers to stop-and-think questions inside `::: details` blocks.
+- Write stop-and-think questions as `::: think Question?` blocks with the model answer as the body; the reader commits to an answer before it's revealed. Start new pages from `docs/_templates/stage.md` or `capstone.md`.
 - Present options as an escalation ladder, simplest and cheapest first. Always say what each option breaks and when not to use it.
 - Explain concepts in language-neutral terms. Use C# for backend code.
 - Code must compile. Wrong code appears only inside a `::: trap` block, explicitly framed as "spot the bug".

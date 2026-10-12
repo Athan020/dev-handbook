@@ -8,6 +8,13 @@ const customContainers: Record<string, string> = {
   trap: 'Spot the bug',
 }
 
+// Short, stable hash for storage keys (djb2).
+function hash(text: string): string {
+  let h = 5381
+  for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) | 0
+  return (h >>> 0).toString(36)
+}
+
 // Backend journeys: stages in order, then the capstone. [file, sidebar text]
 const backendJourneys: { slug: string; text: string; stages: [string, string][] }[] = [
   {
@@ -147,6 +154,20 @@ export default defineConfig({
         if (token.info.trim() !== 'mermaid') return fence(tokens, idx, options, env, self)
         return `<MermaidDiagram code="${encodeURIComponent(token.content)}" />\n`
       }
+
+      // `::: think Question?` becomes <StopAndThink>; the block body is the model answer.
+      // The storage key hashes the page path and question, so a reader's saved answer
+      // survives rebuilds but resets if the question is reworded.
+      md.use(container, 'think', {
+        render(tokens: any[], idx: number, _options: unknown, env: { relativePath?: string }) {
+          const token = tokens[idx]
+          if (token.nesting !== 1) return '</StopAndThink>\n'
+          const question = token.info.trim().slice('think'.length).trim()
+          if (!question) throw new Error(`::: think needs a question in ${env.relativePath}`)
+          const key = hash(`${env.relativePath}:${question}`)
+          return `<StopAndThink storage-key="${key}"><template #question><p>${md.renderInline(question, env)}</p></template>\n`
+        },
+      })
 
       for (const [name, defaultTitle] of Object.entries(customContainers)) {
         md.use(container, name, {
