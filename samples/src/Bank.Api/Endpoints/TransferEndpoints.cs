@@ -24,6 +24,7 @@ public sealed record OpenAccountRequest(string HolderName);
 ///   publishes it (B2 stage 4).
 /// Lab:CrashAfterCommit (0 to 1) kills the API after the transfer commits and before anything
 /// is published, to show what that does to each version.
+/// Journey B3 adds Lab:Funds, Lab:Isolation and Lab:Retries: see Funds.
 /// </summary>
 public static class TransferEndpoints
 {
@@ -52,7 +53,33 @@ public static class TransferEndpoints
         }
 
         var outbox = config["Lab:Transfers"] == "Outbox";
-        var transfer = await RecordTransferAsync(db, request, outbox, ct);
+
+        // #region retry-loop
+        // B3: a transaction that lost a race (a serialization failure or a deadlock) is rolled
+        // back. Run the whole transaction again, up to Lab:Retries times, then give up with 409.
+        TransferCompleted? transfer;
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                transfer = await RecordTransferAsync(db, request, outbox, config, ct);
+                break;
+            }
+            catch (Exception e) when (Funds.IsRetryable(e))
+            {
+                db.ChangeTracker.Clear(); // forget the rows the failed attempt added
+                if (attempt >= config.GetValue("Lab:Retries", 0))
+                {
+                    return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "The transfer conflicted with another. Try again.");
+                }
+            }
+        }
+        // #endregion retry-loop
+
+        if (transfer is null)
+        {
+            return Results.Problem(statusCode: StatusCodes.Status422UnprocessableEntity, title: "Insufficient funds.");
+        }
 
         // Lab only: die here, after the commit and before any publish, as a crash or deployment can.
         if (Random.Shared.NextDouble() < config.GetValue("Lab:CrashAfterCommit", 0.0))
@@ -136,14 +163,19 @@ public static class TransferEndpoints
     }
 
     /// <summary>
-    /// Records the debit and the credit in one database transaction (SaveChanges is atomic).
-    /// Deliberately simple: no balance check, no idempotency key, no concurrency control.
-    /// Journey B3 covers moving money safely.
+    /// Records the debit and the credit in one database transaction. Journey B3 adds the checks
+    /// that make it safe to move money (see Funds): returns null if the account can't afford it.
     /// </summary>
-    private static async Task<TransferCompleted> RecordTransferAsync(
-        BankDb db, TransferRequest request, bool outbox, CancellationToken ct)
+    private static async Task<TransferCompleted?> RecordTransferAsync(
+        BankDb db, TransferRequest request, bool outbox, IConfiguration config, CancellationToken ct)
     {
-        await using var dbTransaction = await db.Database.BeginTransactionAsync(ct);
+        await using var dbTransaction = await db.Database.BeginTransactionAsync(Funds.Isolation(config), ct);
+
+        if (config["Lab:Funds"] == "CheckSum" && !await Funds.HasFundsAsync(db, request.FromAccountId, request.Amount, ct))
+        {
+            return null; // nothing written; disposing the transaction rolls it back
+        }
+
         var now = DateTimeOffset.UtcNow;
         var transfer = new TransferCompleted(
             Guid.CreateVersion7(), request.FromAccountId, request.ToAccountId, request.Amount, request.Reference, now);

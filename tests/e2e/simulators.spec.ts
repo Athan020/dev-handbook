@@ -220,3 +220,72 @@ test.describe('backlog simulator', () => {
     await expect(sim.locator('.tooltip')).toContainText(/waiting; the email sent now waited/)
   })
 })
+
+test.describe('interleaving simulator', () => {
+  const url = '/backend/journeys/the-money-must-add-up/01-check-then-act'
+
+  async function run(page: Page, scenario: string, level: string, action: 'interleave' | 'serial') {
+    await page.goto(url)
+    const sim = page.locator('.interleaving')
+    await sim.locator(`[data-scenario="${scenario}"]`).click()
+    await sim.locator(`[data-level="${level}"]`).click()
+    await sim.locator(`[data-action="${action}"]`).click()
+    return sim
+  }
+  const verdict = (sim: Locator) => sim.locator('[data-stat="verdict"]')
+  const balance = async (sim: Locator) => Number(await sim.locator('[data-stat="balance"]').innerText())
+
+  test('check then insert overdraws at read committed and repeatable read (write skew)', async ({ page }) => {
+    for (const level of ['rc', 'rr']) {
+      const sim = await run(page, 'check-insert', level, 'interleave')
+      await expect(verdict(sim)).toContainText('Overdrawn')
+      expect(await balance(sim)).toBe(-20)
+    }
+  })
+
+  test('serializable aborts one transfer instead of overdrawing', async ({ page }) => {
+    const sim = await run(page, 'check-insert', 'ser', 'interleave')
+    await expect(verdict(sim)).toContainText('Correct')
+    expect(await balance(sim)).toBe(40)
+    await expect(sim.locator('[data-txn="T2"]')).toHaveAttribute('data-status', 'aborted')
+  })
+
+  test('the same code is correct when the transactions do not overlap', async ({ page }) => {
+    const sim = await run(page, 'check-insert', 'rc', 'serial')
+    await expect(verdict(sim)).toContainText('Correct')
+    await expect(sim.locator('[data-txn="T2"]')).toHaveAttribute('data-status', 'rolledback')
+  })
+
+  test('read then write loses an update at read committed, and fails the second writer at repeatable read', async ({ page }) => {
+    let sim = await run(page, 'read-write', 'rc', 'interleave')
+    await expect(verdict(sim)).toContainText('Lost update')
+    sim = await run(page, 'read-write', 'rr', 'interleave')
+    await expect(verdict(sim)).toContainText('Correct')
+    await expect(sim.locator('[data-txn="T2"]')).toHaveAttribute('data-status', 'aborted')
+  })
+
+  test('a conditional update is correct even at read committed', async ({ page }) => {
+    const sim = await run(page, 'conditional', 'rc', 'interleave')
+    await expect(verdict(sim)).toContainText('Correct')
+    expect(await balance(sim)).toBe(40)
+    await expect(sim.locator('[data-txn="T2"]')).toHaveAttribute('data-status', 'rolledback')
+  })
+
+  test('stepping by hand: a blocked transaction cannot step until the lock is released', async ({ page }) => {
+    await page.goto(url)
+    const sim = page.locator('.interleaving')
+    await sim.locator('[data-scenario="conditional"]').click()
+    const step = (t: string) => sim.locator(`[data-txn="${t}"] button.step`)
+    await step('T1').click() // BEGIN
+    await step('T2').click() // BEGIN
+    await step('T1').click() // UPDATE, takes the lock
+    await step('T2').click() // UPDATE, waits
+    await expect(sim.locator('[data-txn="T2"]')).toHaveAttribute('data-status', 'blocked')
+    await expect(step('T2')).toBeDisabled()
+    await step('T1').click() // one row updated
+    await step('T1').click() // COMMIT releases the lock; T2 resumes and finds 40
+    await expect(sim.locator('[data-txn="T2"]')).toHaveAttribute('data-status', 'active')
+    await step('T2').click() // no row updated: ROLLBACK
+    await expect(verdict(sim)).toContainText('Correct')
+  })
+})

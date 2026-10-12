@@ -4,6 +4,7 @@ import BacklogSimulator from './components/BacklogSimulator.vue'
 import CacheSimulator from './components/CacheSimulator.vue'
 import DeliverySimulator from './components/DeliverySimulator.vue'
 import HashRingSimulator from './components/HashRingSimulator.vue'
+import InterleavingSimulator from './components/InterleavingSimulator.vue'
 import MermaidDiagram from './components/MermaidDiagram.vue'
 import OutboxSimulator from './components/OutboxSimulator.vue'
 import PoolSimulator from './components/PoolSimulator.vue'
@@ -25,5 +26,6 @@ export default {
     app.component('DeliverySimulator', DeliverySimulator)
     app.component('OutboxSimulator', OutboxSimulator)
     app.component('BacklogSimulator', BacklogSimulator)
+    app.component('InterleavingSimulator', InterleavingSimulator)
   },
 } satisfies Theme

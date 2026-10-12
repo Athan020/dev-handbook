@@ -64,6 +64,10 @@ curl localhost:5090/stats   # emails sent, duplicates suppressed, failed and ref
 curl -X POST localhost:5090/reset
 ```
 
+## Journey B3: money that adds up
+
+B3 extends the same transfer API, and its labs run with `--Lab:Transfers=Event` (or `Outbox`). `--Lab:Funds=None|CheckSum` chooses how a transfer checks the account can afford it (default `None`, as in B1 and B2); `--Lab:Isolation=ReadCommitted|RepeatableRead|Serializable` sets the transaction's isolation level; and `--Lab:Retries=10` retries transfers that fail with a serialization failure or deadlock. Refused transfers return 422, and transfers that lost a race and ran out of retries return 409. `dotnet run --project tools/Bank.Load -- --race 10` opens accounts with a deposit of 100 and sends ten transfers of 60 from each at once (`--rounds`, `--deposit` and `--amount` change the numbers). The balance check needs B1 stage 3's index; the stage page has the command.
+
 ## Lab tools
 
 - **Load generator.** `dotnet run --project tools/Bank.Load -- --seconds 20 --concurrency 8` sends requests for random accounts and reports latency percentiles. Use `--path` to target another endpoint, for example `--path "/accounts/{id}/transactions/feed"`.

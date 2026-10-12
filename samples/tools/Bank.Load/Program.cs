@@ -16,6 +16,10 @@
 //
 // --payroll N posts exactly N salary transfers, --concurrency at a time, as fast as the API
 // accepts them: the burst that B2 stage 7 needs. Then it exits.
+//
+// --race N runs rounds of a race (B3 stage 1): open an account, deposit --deposit (default 100),
+// then send N transfers of --amount (default 60) from it, all at once. It reports how the API
+// answered, and in how many of --rounds rounds (default 50) the account ended up overdrawn.
 using System.Diagnostics;
 using System.Globalization;
 using System.Net.Http.Json;
@@ -44,6 +48,58 @@ if (Array.IndexOf(args, "--ordering-burst") is var burstAt and >= 0)
     Console.WriteLine($"Opened {count} accounts, with three transfers each after the first.");
     return;
 }
+
+if (Array.IndexOf(args, "--race") is var raceAt and >= 0)
+{
+    var racers = int.Parse(args[raceAt + 1], CultureInfo.InvariantCulture);
+    var rounds = Arg("--rounds", 50);
+    var deposit = Arg("--deposit", 100);
+    var amount = Arg("--amount", 60);
+    var statuses = new Dictionary<int, int>();
+    var overdrawn = 0;
+    var lowest = decimal.MaxValue;
+    for (var round = 0; round < rounds; round++)
+    {
+        var from = await OpenAsync($"Race {round} payer");
+        var to = await OpenAsync($"Race {round} payee");
+        (await http.PostAsJsonAsync($"/accounts/{from}/transactions", new { amount = (decimal)deposit, description = "Deposit" })).EnsureSuccessStatusCode();
+
+        // All transfers wait at the gate, then go together.
+        using var gate = new SemaphoreSlim(0);
+        var sends = Enumerable.Range(0, racers).Select(async _ =>
+        {
+            await gate.WaitAsync();
+            using var response = await http.PostAsJsonAsync("/transfers", new { fromAccountId = from, toAccountId = to, amount = (decimal)amount, reference = "Race" });
+            return (int)response.StatusCode;
+        }).ToList();
+        gate.Release(racers);
+        foreach (var status in await Task.WhenAll(sends))
+        {
+            statuses[status] = statuses.GetValueOrDefault(status) + 1;
+        }
+
+        var balance = (await http.GetFromJsonAsync<Summary>($"/accounts/{from}/summary"))!.Balance;
+        lowest = Math.Min(lowest, balance);
+        if (balance < 0)
+        {
+            overdrawn++;
+        }
+    }
+
+    Console.WriteLine($"{rounds} rounds: deposit {deposit}, then {racers} transfers of {amount} at once.");
+    Console.WriteLine($"Responses: {string.Join(", ", statuses.OrderBy(s => s.Key).Select(s => $"{s.Key} x {s.Value}"))}");
+    Console.WriteLine($"Overdrawn after {overdrawn} of {rounds} rounds; lowest balance {lowest}.");
+    return;
+
+    async Task<int> OpenAsync(string name)
+    {
+        var opened = await http.PostAsJsonAsync("/accounts", new { holderName = name });
+        return (await opened.Content.ReadFromJsonAsync<OpenedAccount>())!.Id;
+    }
+}
+
+int Arg(string name, int fallback) =>
+    Array.IndexOf(args, name) is var i and >= 0 ? int.Parse(args[i + 1], CultureInfo.InvariantCulture) : fallback;
 
 if (Array.IndexOf(args, "--payroll") is var payrollAt and >= 0)
 {
@@ -127,6 +183,8 @@ static double Percentile(double[] sorted, double p) =>
 // #endregion percentile
 
 sealed record OpenedAccount(int Id);
+
+sealed record Summary(decimal Balance);
 
 sealed record Options(string Url, string Path, int Concurrency, int Seconds, int Accounts, double Hot, int HotAccounts, bool Transfers)
 {

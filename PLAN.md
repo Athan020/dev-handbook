@@ -210,6 +210,7 @@ Do not carry these over as correct. Use them as "spot the bug" material where th
 | `03-architecture/event-driven-architecture.md` — `TransactionService`, `EventSourcedAccountRepository` | Saves to the database and then publishes, so a crash in between loses the event (dual write). | B2 stage 4 |
 | `06-cloud/messaging-events.md` — `EnqueueBatchAsync` | Reassigns a `using var` variable, which does not compile. | B2 (minor trap) |
 | `02-system-design/idempotency.md` — `PaymentService` | Debits and credits across services with no transaction or compensation, and stores the idempotency result in a cache separately from the database write. | B3 |
+| `05-databases/sql-fundamentals.md` — isolation levels | Runs `SET TRANSACTION ISOLATION LEVEL SERIALIZABLE` before `BEGIN`, which Postgres ignores with a warning, so the "critical" work runs at read committed. Its anomaly table omits lost updates and write skew. | B3 stage 1 |
 | `01-fundamentals/cap-theorem.md` | Presents CAP as "pick two" categories per product, and mislabels PACELC examples: Cassandra and DynamoDB default to latency over consistency when there's no partition (PA/EL), not PA/EC. | Phase 6 consistency reference |
 
 ## 9. Changes from v1
