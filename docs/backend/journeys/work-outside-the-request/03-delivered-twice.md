@@ -72,6 +72,8 @@ Duplicates don't only come from crashes. A publisher that retries after losing a
 
 Every one of these needs a stable id that's the same on every delivery: here, the message id, set to the transfer's id.
 
+The [idempotency reference](/backend/reference/idempotency) collects these techniques in one place, alongside their HTTP equivalent, idempotency keys, which [B3 stage 3](/backend/journeys/the-money-must-add-up/03-paid-twice) builds.
+
 ## The escalation ladder
 
 ### 1. Accept duplicates, where they're harmless

@@ -43,6 +43,19 @@ const backendJourneys: { slug: string; text: string; stages: [string, string][] 
       ['07-backpressure', '7. The queue keeps growing'],
     ],
   },
+  {
+    slug: 'the-money-must-add-up',
+    text: 'B3: The money must add up',
+    stages: [
+      ['01-check-then-act', '1. Check, then act'],
+      ['02-locks-or-versions', '2. Locks or versions'],
+      ['03-paid-twice', '3. Paid twice'],
+      ['04-cents-that-go-missing', '4. Cents that go missing'],
+      ['05-a-ledger-you-can-audit', '5. A ledger you can audit'],
+      ['06-when-money-leaves', '6. When money leaves your database'],
+      ['07-reconciliation', '7. Reconciliation'],
+    ],
+  },
 ]
 
 const backendSidebar: DefaultTheme.SidebarItem[] = [
@@ -62,6 +75,11 @@ const backendSidebar: DefaultTheme.SidebarItem[] = [
         ],
       }
     }),
+  },
+  {
+    text: 'Reference',
+    collapsed: true,
+    items: [{ text: 'Idempotency', link: '/backend/reference/idempotency' }],
   },
 ]
 

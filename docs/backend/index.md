@@ -22,10 +22,10 @@ The bar is everything around that core which senior work and senior interviews p
 |---|---|---|
 | [B1: Your API gets popular](./journeys/your-api-gets-popular/) | Traffic grows until the database can't keep up | Reads are degrading on a 10M-row table |
 | [B2: Work that shouldn't happen in the request](./journeys/work-outside-the-request/) | Slow, unreliable work inside the request | Design a multi-channel notification system |
+| [B3: The money must add up](./journeys/the-money-must-add-up/) | Concurrency, retries and audits threaten correctness | Design a transfer between accounts |
 
 ### Coming later
 
-- **B3: The money must add up.** Transactions and isolation anomalies, optimistic vs pessimistic concurrency, idempotency keys, double-entry ledgers, reconciliation.
 - **B4: Things fail.** Timeouts and deadlines, retries with backoff and jitter, circuit breakers and bulkheads, graceful degradation, rate limiting.
 - **B5: One service becomes many.** Modular monolith first, bounded contexts, data ownership, sync vs async between services, sagas, API gateways, strangler-fig migration.
 - **B6: Shipping it safely.** Pipelines, environments, infrastructure as code, zero-downtime database migrations, deployment strategies, feature flags, rollbacks.
@@ -35,4 +35,4 @@ The bar is everything around that core which senior work and senior interviews p
 
 ## Suggested order
 
-Start with the [core self-check](./core-self-check), then take B1 and B2 in order. Later journeys build on both.
+Start with the [core self-check](./core-self-check), then take the journeys in order: B1 and B2 first, as later journeys build on both.
