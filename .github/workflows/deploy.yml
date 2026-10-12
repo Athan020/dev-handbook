@@ -24,6 +24,8 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - name: Check journey pages against the templates
+        run: npm run check:journeys
       - run: npx playwright install --with-deps chromium
       - name: Build and run browser tests
         run: npm run test:e2e

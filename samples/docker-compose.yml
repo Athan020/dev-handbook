@@ -42,7 +42,9 @@ services:
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      # Run the check as the rabbitmq user. Run as root on a fresh volume, it can create the
+      # Erlang cookie before the server does, owned by root, and the server then can't boot.
+      test: ["CMD", "su-exec", "rabbitmq", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 5s
       timeout: 5s
       retries: 30

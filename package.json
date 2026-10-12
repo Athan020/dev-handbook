@@ -6,7 +6,8 @@
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
-    "test:e2e": "vitepress build docs && playwright test"
+    "test:e2e": "vitepress build docs && playwright test",
+    "check:journeys": "node scripts/check-journeys.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",
