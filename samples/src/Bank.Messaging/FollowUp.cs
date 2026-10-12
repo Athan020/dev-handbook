@@ -18,15 +18,24 @@ public sealed class FollowUp(HttpClient http)
         await ScoreForFraudAsync(transfer, ct);
     }
 
-    public async Task SendEmailAsync(TransferCompleted transfer, CancellationToken ct)
+    public async Task SendEmailAsync(TransferCompleted transfer, CancellationToken ct, string? idempotencyKey = null)
     {
-        var response = await http.PostAsJsonAsync("/email", new
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/email")
         {
-            transfer.TransferId,
-            To = $"account-{transfer.FromAccountId}@example.com",
-            Subject = $"You sent R{transfer.Amount:N2}",
-            transfer.CompletedAt,
-        }, ct);
+            Content = JsonContent.Create(new
+            {
+                transfer.TransferId,
+                To = $"account-{transfer.FromAccountId}@example.com",
+                Subject = $"You sent R{transfer.Amount:N2}",
+                transfer.CompletedAt,
+            }),
+        };
+        // #region idempotency-key
+        // B2 stage 3: the email can't share a database transaction with anything, so ask the
+        // provider to deduplicate instead. The same key on a retry means "same email, send once".
+        if (idempotencyKey is not null) request.Headers.Add("Idempotency-Key", idempotencyKey);
+        // #endregion idempotency-key
+        var response = await http.SendAsync(request, ct);
         response.EnsureSuccessStatusCode();
     }
 

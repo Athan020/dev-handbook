@@ -54,7 +54,9 @@ dotnet run --project tools/Bank.FakeServices   # stand-in email and fraud servic
 dotnet run --project src/Bank.Worker           # does follow-up work taken off RabbitMQ
 ```
 
-`--Lab:Transfers=Inline|Background|Queue` on the API chooses where a transfer's follow-up work runs (default `Inline`). Make the fake services slow or unreliable while they run, and see what they've done:
+`--Lab:Transfers=Inline|Background|Queue|Event|Outbox` on the API chooses where a transfer's follow-up work runs, and how its event is published (default `Inline`). `--Lab:CrashAfterCommit=0.1` and `--Lab:RelayCrashChance=0.2` make the API die at the worst moments, for stage 4.
+
+`--Worker:Role=follow-up|email|fraud|rewards|history` chooses what a worker does. `--Worker:Idempotent=true` makes the email and rewards workers safe against duplicates, and `--Worker:CrashChance=0.1` makes a worker die after the work but before acknowledging it, for stage 3. After pulling new code, run `dotnet run --project src/Bank.Api -- seed` once: it applies any new database migrations, then stops when it sees existing data. Make the fake services slow or unreliable while they run, and see what they've done:
 
 ```sh
 curl -X POST localhost:5090/settings -H "Content-Type: application/json" -d '{"emailDelayMs": 300, "fraudDelayMs": 500, "failureRate": 0.2}'

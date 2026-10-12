@@ -1,8 +1,10 @@
 import DefaultTheme from 'vitepress/theme'
 import type { Theme } from 'vitepress'
 import CacheSimulator from './components/CacheSimulator.vue'
+import DeliverySimulator from './components/DeliverySimulator.vue'
 import HashRingSimulator from './components/HashRingSimulator.vue'
 import MermaidDiagram from './components/MermaidDiagram.vue'
+import OutboxSimulator from './components/OutboxSimulator.vue'
 import PoolSimulator from './components/PoolSimulator.vue'
 import ReplicaSimulator from './components/ReplicaSimulator.vue'
 import SqlPlayground from './components/SqlPlayground.vue'
@@ -19,5 +21,7 @@ export default {
     app.component('CacheSimulator', CacheSimulator)
     app.component('ReplicaSimulator', ReplicaSimulator)
     app.component('HashRingSimulator', HashRingSimulator)
+    app.component('DeliverySimulator', DeliverySimulator)
+    app.component('OutboxSimulator', OutboxSimulator)
   },
 } satisfies Theme

@@ -18,13 +18,23 @@ var settings = new FakeSettings(
     app.Configuration.GetValue("failureRate", 0.0));
 var emailsPerTransfer = new ConcurrentDictionary<Guid, int>();
 var emailLagsMs = new ConcurrentQueue<double>(); // how long after the transfer each email went out
+var idempotencyKeys = new ConcurrentDictionary<string, bool>();
+var duplicatesSuppressed = 0;
 var fraudChecks = 0;
 
-app.MapPost("/email", async (EmailRequest email, ILogger<Program> log, CancellationToken ct) =>
+app.MapPost("/email", async (EmailRequest email, HttpRequest http, ILogger<Program> log, CancellationToken ct) =>
 {
     var current = settings;
     await Task.Delay(current.EmailDelayMs, ct);
     if (Random.Shared.NextDouble() < current.FailureRate) return Results.StatusCode(503);
+
+    // Like real email and payment APIs: a repeated Idempotency-Key gets the original result,
+    // and no second email.
+    if (http.Headers["Idempotency-Key"].ToString() is { Length: > 0 } key && !idempotencyKeys.TryAdd(key, true))
+    {
+        Interlocked.Increment(ref duplicatesSuppressed);
+        return Results.Ok();
+    }
 
     var count = emailsPerTransfer.AddOrUpdate(email.TransferId, 1, (_, n) => n + 1);
     if (email.CompletedAt is { } completedAt) emailLagsMs.Enqueue((DateTimeOffset.UtcNow - completedAt).TotalMilliseconds);
@@ -49,6 +59,7 @@ app.MapGet("/stats", () => new
     transfersEmailed = emailsPerTransfer.Count,
     transfersEmailedMoreThanOnce = emailsPerTransfer.Count(e => e.Value > 1),
     fraudChecks,
+    duplicatesSuppressed,
     emailLagMs = Lags(emailLagsMs),
     settings,
 });
@@ -63,6 +74,8 @@ app.MapPost("/reset", () =>
 {
     emailsPerTransfer.Clear();
     emailLagsMs.Clear();
+    idempotencyKeys.Clear();
+    duplicatesSuppressed = 0;
     fraudChecks = 0;
     return Results.Ok();
 });

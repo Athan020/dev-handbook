@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Text.Json;
 using System.Threading.Channels;
 using Bank.Api.Data;
 using Bank.Messaging;
@@ -16,6 +18,10 @@ public sealed record TransferRequest(int FromAccountId, int ToAccountId, decimal
 ///   Queue: published to RabbitMQ after the transfer commits; Bank.Worker does the work.
 ///   Event: a "transfer completed" event published to an exchange; each service that cares
 ///   has its own queue (B2 stage 2).
+///   Outbox: the event is saved in the same transaction as the transfer, and OutboxRelay
+///   publishes it (B2 stage 4).
+/// Lab:CrashAfterCommit (0 to 1) kills the API after the transfer commits and before anything
+/// is published, to show what that does to each version.
 /// </summary>
 public static class TransferEndpoints
 {
@@ -42,7 +48,14 @@ public static class TransferEndpoints
             return Results.NotFound();
         }
 
-        var transfer = await RecordTransferAsync(db, request, ct);
+        var outbox = config["Lab:Transfers"] == "Outbox";
+        var transfer = await RecordTransferAsync(db, request, outbox, ct);
+
+        // Lab only: die here, after the commit and before any publish, as a crash or deployment can.
+        if (Random.Shared.NextDouble() < config.GetValue("Lab:CrashAfterCommit", 0.0))
+        {
+            Process.GetCurrentProcess().Kill();
+        }
 
         switch (config["Lab:Transfers"])
         {
@@ -62,6 +75,11 @@ public static class TransferEndpoints
                 await services.GetRequiredService<RabbitPublisher>().PublishAsync(
                     exchange: "", routingKey: Rabbit.FollowUpQueue, transfer, transfer.TransferId.ToString(), ct);
                 // #endregion queue
+                break;
+
+            case "Outbox":
+                // Nothing to publish here: the event was saved with the transfer, and the relay
+                // will publish it, even if this process dies now.
                 break;
 
             case "Event":
@@ -91,9 +109,12 @@ public static class TransferEndpoints
     /// Deliberately simple: no balance check, no idempotency key, no concurrency control.
     /// Journey B3 covers moving money safely.
     /// </summary>
-    private static async Task<TransferCompleted> RecordTransferAsync(BankDb db, TransferRequest request, CancellationToken ct)
+    private static async Task<TransferCompleted> RecordTransferAsync(
+        BankDb db, TransferRequest request, bool outbox, CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
+        var transfer = new TransferCompleted(
+            Guid.CreateVersion7(), request.FromAccountId, request.ToAccountId, request.Amount, request.Reference, now);
         db.Transactions.AddRange(
             new Transaction
             {
@@ -105,9 +126,24 @@ public static class TransferEndpoints
                 AccountId = request.ToAccountId, CounterpartyAccountId = request.FromAccountId,
                 Amount = request.Amount, Description = "Incoming transfer", CreatedAt = now,
             });
-        await db.SaveChangesAsync(ct);
 
-        return new TransferCompleted(Guid.CreateVersion7(), request.FromAccountId, request.ToAccountId, request.Amount, request.Reference, now);
+        // #region outbox-write
+        // B2 stage 4: the event is a row in the same transaction as the transfer. Both commit,
+        // or neither does. The relay publishes it later.
+        if (outbox)
+        {
+            db.OutboxMessages.Add(new OutboxMessage
+            {
+                Id = transfer.TransferId,
+                Type = nameof(TransferCompleted),
+                Payload = JsonSerializer.Serialize(transfer, JsonSerializerOptions.Web),
+                CreatedAt = now,
+            });
+        }
+        // #endregion outbox-write
+
+        await db.SaveChangesAsync(ct);
+        return transfer;
     }
 }
 

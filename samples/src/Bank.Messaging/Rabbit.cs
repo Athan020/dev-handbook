@@ -16,6 +16,7 @@ public static class Rabbit
     public const string TransferCompletedKey = "transfer.completed";
     public const string EmailQueue = "email.transfer-completed";
     public const string FraudQueue = "fraud.transfer-completed";
+    public const string RewardsQueue = "rewards.transfer-completed";
     public const string TransfersStream = "transfers.history";
 
     public static ConnectionFactory Factory(IConfiguration config, string clientName) => new()
@@ -40,7 +41,7 @@ public static class Rabbit
 
         // One queue per consuming service. Each gets every event; within a service, several
         // workers on the same queue share the messages (competing consumers).
-        foreach (var queue in new[] { EmailQueue, FraudQueue })
+        foreach (var queue in new[] { EmailQueue, FraudQueue, RewardsQueue })
         {
             await channel.QueueDeclareAsync(queue, durable: true, exclusive: false, autoDelete: false, cancellationToken: ct);
             await channel.QueueBindAsync(queue, TransfersExchange, TransferCompletedKey, cancellationToken: ct);

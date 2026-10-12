@@ -141,3 +141,41 @@ test.describe('sharding simulator', () => {
     expect(parseFloat(await sim.locator('[data-stat="max"]').innerText())).toBeGreaterThan(even)
   })
 })
+
+const cell = async (sim: Locator, strategy: string, column: string) =>
+  Number(await sim.locator(`tr[data-strategy="${strategy}"] td[data-col="${column}"]`).innerText())
+
+test.describe('duplicate delivery simulator', () => {
+  const url = '/backend/journeys/work-outside-the-request/03-delivered-twice'
+
+  test('only acting and recording together gives exactly-once effects', async ({ page }) => {
+    await page.goto(url)
+    const sim = page.locator('.simulator').first()
+    expect(await cell(sim, 'none', 'duplicated')).toBeGreaterThan(0)
+    expect(await cell(sim, 'markFirst', 'lost')).toBeGreaterThan(0)
+    expect(await cell(sim, 'effectFirst', 'duplicated')).toBeGreaterThan(0)
+    expect(await cell(sim, 'effectFirst', 'duplicated')).toBeLessThan(await cell(sim, 'none', 'duplicated'))
+    expect(await cell(sim, 'together', 'once')).toBe(1000)
+  })
+
+  test('with no crashes, every strategy is correct', async ({ page }) => {
+    await page.goto(url)
+    const sim = page.locator('.simulator').first()
+    await sim.getByLabel(/Chance of crashing/).fill('0')
+    for (const s of ['none', 'markFirst', 'effectFirst', 'together']) expect(await cell(sim, s, 'once')).toBe(1000)
+  })
+})
+
+test.describe('outbox simulator', () => {
+  const url = '/backend/journeys/work-outside-the-request/04-dual-write-and-outbox'
+
+  test('each dual-write order fails its own way; outbox plus idempotent consumer is correct', async ({ page }) => {
+    await page.goto(url)
+    const sim = page.locator('.simulator').first()
+    expect(await cell(sim, 'afterCommit', 'lost')).toBeGreaterThan(0)
+    expect(await cell(sim, 'beforeCommit', 'ghost')).toBeGreaterThan(0)
+    expect(await cell(sim, 'outbox', 'lost')).toBe(0)
+    expect(await cell(sim, 'outbox', 'duplicated')).toBeGreaterThan(0)
+    expect(await cell(sim, 'outboxIdempotent', 'correct')).toBe(1000)
+  })
+})

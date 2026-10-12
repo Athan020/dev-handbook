@@ -3,9 +3,12 @@
 // the messages between them.
 using Bank.Messaging;
 using Bank.Worker;
+using Npgsql;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddHttpClient<FollowUp>(http =>
     http.BaseAddress = new Uri(builder.Configuration["FakeServices:Url"] ?? "http://localhost:5090"));
+builder.Services.AddSingleton(_ => NpgsqlDataSource.Create(builder.Configuration.GetConnectionString("Bank")!));
+builder.Services.AddSingleton<Rewards>();
 builder.Services.AddHostedService<Consumer>();
 builder.Build().Run();

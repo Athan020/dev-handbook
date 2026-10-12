@@ -23,6 +23,7 @@ builder.Services.AddHttpClient<FollowUp>(http =>
 builder.Services.AddSingleton<BackgroundFollowUpQueue>();
 builder.Services.AddHostedService<BackgroundFollowUpService>();
 builder.Services.AddSingleton<RabbitPublisher>();
+builder.Services.AddHostedService<OutboxRelay>();
 builder.Services.AddProblemDetails();
 builder.Services.AddMemoryCache();
 builder.Services.AddHybridCache();
