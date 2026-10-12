@@ -51,6 +51,11 @@ jobs:
       # Integration tests start Postgres with Testcontainers (Docker is available on the runner).
       - name: Test samples
         run: dotnet test --solution samples/Samples.sln
+      # Practice sets: the starting points must compile, and the worked solutions must pass every test.
+      - name: Build assessment practice sets
+        run: dotnet build samples/assessments/Assessments.sln
+      - name: Test assessment worked solutions
+        run: dotnet test --solution samples/assessments/Assessments.sln -p:UseReference=true
 
   build:
     runs-on: ubuntu-latest

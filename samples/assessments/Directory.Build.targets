@@ -1,0 +1,18 @@
+<Project>
+  <!--
+    Each practice set keeps your attempts in Problems/ and worked solutions in Reference/.
+    A normal build compiles Problems/. `dotnet test -p:UseReference=true` compiles Reference/
+    instead, which is how CI checks that every test can be passed.
+  -->
+  <ItemGroup Condition="'$(UseReference)' == 'true'">
+    <Compile Remove="Problems/**" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(UseReference)' != 'true'">
+    <Compile Remove="Reference/**" />
+  </ItemGroup>
+
+  <!-- Test helpers shared by every set. -->
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)Shared/*.cs" Link="Shared/%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>
