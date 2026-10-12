@@ -7,5 +7,5 @@ using Bank.Worker;
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddHttpClient<FollowUp>(http =>
     http.BaseAddress = new Uri(builder.Configuration["FakeServices:Url"] ?? "http://localhost:5090"));
-builder.Services.AddHostedService<FollowUpConsumer>();
+builder.Services.AddHostedService<Consumer>();
 builder.Build().Run();

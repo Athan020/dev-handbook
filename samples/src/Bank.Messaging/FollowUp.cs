@@ -25,6 +25,7 @@ public sealed class FollowUp(HttpClient http)
             transfer.TransferId,
             To = $"account-{transfer.FromAccountId}@example.com",
             Subject = $"You sent R{transfer.Amount:N2}",
+            transfer.CompletedAt,
         }, ct);
         response.EnsureSuccessStatusCode();
     }

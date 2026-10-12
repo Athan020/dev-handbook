@@ -14,6 +14,8 @@ public sealed record TransferRequest(int FromAccountId, int ToAccountId, decimal
 ///   Inline (the default): inside the request, before responding.
 ///   Background: handed to an in-process queue that a background service drains.
 ///   Queue: published to RabbitMQ after the transfer commits; Bank.Worker does the work.
+///   Event: a "transfer completed" event published to an exchange; each service that cares
+///   has its own queue (B2 stage 2).
 /// </summary>
 public static class TransferEndpoints
 {
@@ -60,6 +62,15 @@ public static class TransferEndpoints
                 await services.GetRequiredService<RabbitPublisher>().PublishAsync(
                     exchange: "", routingKey: Rabbit.FollowUpQueue, transfer, transfer.TransferId.ToString(), ct);
                 // #endregion queue
+                break;
+
+            case "Event":
+                // #region event
+                // Publish what happened, not what to do: one event, to an exchange. Each interested
+                // service binds its own queue and gets its own copy. The API doesn't know who they are.
+                await services.GetRequiredService<RabbitPublisher>().PublishAsync(
+                    Rabbit.TransfersExchange, Rabbit.TransferCompletedKey, transfer, transfer.TransferId.ToString(), ct);
+                // #endregion event
                 break;
 
             default:

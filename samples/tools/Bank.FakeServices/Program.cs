@@ -17,6 +17,7 @@ var settings = new FakeSettings(
     app.Configuration.GetValue("fraudDelayMs", 500),
     app.Configuration.GetValue("failureRate", 0.0));
 var emailsPerTransfer = new ConcurrentDictionary<Guid, int>();
+var emailLagsMs = new ConcurrentQueue<double>(); // how long after the transfer each email went out
 var fraudChecks = 0;
 
 app.MapPost("/email", async (EmailRequest email, ILogger<Program> log, CancellationToken ct) =>
@@ -26,6 +27,7 @@ app.MapPost("/email", async (EmailRequest email, ILogger<Program> log, Cancellat
     if (Random.Shared.NextDouble() < current.FailureRate) return Results.StatusCode(503);
 
     var count = emailsPerTransfer.AddOrUpdate(email.TransferId, 1, (_, n) => n + 1);
+    if (email.CompletedAt is { } completedAt) emailLagsMs.Enqueue((DateTimeOffset.UtcNow - completedAt).TotalMilliseconds);
     log.LogInformation("Email for transfer {TransferId} to {To}{Duplicate}", email.TransferId, email.To,
         count > 1 ? $" (copy {count}!)" : "");
     return Results.Ok();
@@ -47,6 +49,7 @@ app.MapGet("/stats", () => new
     transfersEmailed = emailsPerTransfer.Count,
     transfersEmailedMoreThanOnce = emailsPerTransfer.Count(e => e.Value > 1),
     fraudChecks,
+    emailLagMs = Lags(emailLagsMs),
     settings,
 });
 
@@ -59,11 +62,19 @@ app.MapPost("/settings", (FakeSettings next) =>
 app.MapPost("/reset", () =>
 {
     emailsPerTransfer.Clear();
+    emailLagsMs.Clear();
     fraudChecks = 0;
     return Results.Ok();
 });
 
 app.Run();
 
+static object Lags(IEnumerable<double> values)
+{
+    var sorted = values.Order().ToArray();
+    double At(double p) => sorted.Length == 0 ? 0 : Math.Round(sorted[Math.Clamp((int)Math.Ceiling(p * sorted.Length) - 1, 0, sorted.Length - 1)]);
+    return new { p50 = At(0.5), p99 = At(0.99), max = sorted.Length == 0 ? 0 : Math.Round(sorted[^1]) };
+}
+
 sealed record FakeSettings(int EmailDelayMs, int FraudDelayMs, double FailureRate);
-sealed record EmailRequest(Guid TransferId, string To, string Subject);
+sealed record EmailRequest(Guid TransferId, string To, string Subject, DateTimeOffset? CompletedAt);

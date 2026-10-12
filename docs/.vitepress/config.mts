@@ -127,6 +127,8 @@ export default defineConfig({
   cleanUrls: true,
   // _source/ and samples/ live outside docs/, so these entries are a safety net.
   srcExclude: ['**/_source/**', '**/samples/**', '_templates/**'],
+  // Labs link to services on the reader's machine (RabbitMQ's UI, the API); every other link is checked.
+  ignoreDeadLinks: 'localhostLinks',
 
   vite: {
     // PGlite loads its WebAssembly files relative to its own module, which pre-bundling breaks.

@@ -43,6 +43,7 @@ public sealed class RabbitPublisher(IConfiguration config) : IAsyncDisposable
         _channel = await _connection.CreateChannelAsync(
             new CreateChannelOptions(publisherConfirmationsEnabled: true, publisherConfirmationTrackingEnabled: true), ct);
         await Rabbit.DeclareFollowUpQueueAsync(_channel, ct);
+        await Rabbit.DeclareTransferTopologyAsync(_channel, ct);
         return _channel;
     }
 
