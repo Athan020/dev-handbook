@@ -39,9 +39,9 @@ public static class AccountEndpoints
 
     /// <summary>
     /// Newest transactions first, one page at a time (offset paging).
-    /// Two implementations, chosen with the Lab:Transactions setting, so you can measure
-    /// them against each other: Naive (the default, as first written) and Projected
-    /// (B1 stage 3's fix).
+    /// Implementations chosen with the Lab:Transactions setting, so you can measure them
+    /// against each other: Naive (the default, as first written), Projected (B1 stage 3's
+    /// fix) and Blocking (B1 stage 4's "spot the bug").
     /// </summary>
     private static async Task<IResult> GetTransactions(
         int id, BankDb db, IConfiguration config, CancellationToken ct, int page = 1, int pageSize = 20)
@@ -54,9 +54,12 @@ public static class AccountEndpoints
             });
         }
 
-        var items = config["Lab:Transactions"] == "Projected"
-            ? await ProjectedPageAsync(db, id, page, pageSize, ct)
-            : await NaivePageAsync(db, id, page, pageSize, ct);
+        var items = config["Lab:Transactions"] switch
+        {
+            "Projected" => await ProjectedPageAsync(db, id, page, pageSize, ct),
+            "Blocking" => BlockingPage(db, id, page, pageSize, ct),
+            _ => await NaivePageAsync(db, id, page, pageSize, ct),
+        };
 
         return items is null ? Results.NotFound() : Results.Ok(new TransactionPage(page, pageSize, items));
     }
@@ -125,6 +128,17 @@ public static class AccountEndpoints
         return items;
     }
     // #endregion projected
+
+    // Deliberately wrong, for B1 stage 4: the projected query, but the request thread blocks
+    // while the database works instead of being released. Under load this starves the thread
+    // pool. (This comment sits outside the region because the stage shows it as a "spot the bug".)
+    // #region blocking
+    private static List<TransactionResponse>? BlockingPage(
+        BankDb db, int id, int page, int pageSize, CancellationToken ct)
+    {
+        return ProjectedPageAsync(db, id, page, pageSize, ct).Result;
+    }
+    // #endregion blocking
 
     // #region keyset
     // Keyset (cursor) paging. Instead of skipping rows, each page starts strictly after the

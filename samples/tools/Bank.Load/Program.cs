@@ -13,9 +13,17 @@ using var http = new HttpClient { BaseAddress = new Uri(options.Url), Timeout = 
 Console.WriteLine($"{options.Concurrency} workers for {options.Seconds}s against {options.Url}{options.Path}");
 
 // Warm up first: the first requests pay for JIT compilation and opening connections.
+// A struggling server can fail these too; that's what the measurement is for, so carry on.
 for (var i = 0; i < 5; i++)
 {
-    await http.GetAsync(options.PathFor(Random.Shared.Next(1, options.Accounts + 1)));
+    try
+    {
+        using var _ = await http.GetAsync(options.PathFor(Random.Shared.Next(1, options.Accounts + 1)));
+    }
+    catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+    {
+        Console.WriteLine($"Warm-up request failed: {e.Message}");
+    }
 }
 
 var latencies = new List<double>[options.Concurrency];

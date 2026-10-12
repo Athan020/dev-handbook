@@ -37,6 +37,19 @@ public sealed class PagingTests(BankApiFixture fixture) : IClassFixture<BankApiF
     }
 
     [Fact]
+    public async Task Blocking_version_returns_the_same_data_it_is_only_wrong_under_load()
+    {
+        const string url = "/accounts/1/transactions?pageSize=20";
+
+        var blocking = await Client("Blocking").GetFromJsonAsync<TransactionPage>(url, Ct);
+        var projected = await Client("Projected").GetFromJsonAsync<TransactionPage>(url, Ct);
+
+        Assert.NotNull(blocking);
+        Assert.NotNull(projected);
+        Assert.Equal(projected.Items, blocking.Items);
+    }
+
+    [Fact]
     public async Task Projected_version_returns_404_for_an_unknown_account_and_empty_beyond_the_last_page()
     {
         var client = Client("Projected");
