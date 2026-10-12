@@ -9,6 +9,8 @@ builder.Services.AddDbContext<BankDb>(options => options
     // snake_case tables and columns (account_id, not "AccountId"), as is usual in Postgres.
     .UseSnakeCaseNamingConvention());
 builder.Services.AddProblemDetails();
+builder.Services.AddMemoryCache();
+builder.Services.AddHybridCache();
 
 if (args is ["seed", ..])
 {
@@ -52,6 +54,7 @@ if (args is ["schema"])
 app.UseExceptionHandler();
 app.MapGet("/health", () => Results.Ok("healthy"));
 app.MapAccountEndpoints();
+app.MapSummaryEndpoints();
 
 app.Run();
 

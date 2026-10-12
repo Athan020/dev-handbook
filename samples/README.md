@@ -31,6 +31,8 @@ The endpoints:
 | `GET /accounts/{id}` | One account |
 | `GET /accounts/{id}/transactions?page=1&pageSize=20` | Newest transactions first, by page number (offset paging) |
 | `GET /accounts/{id}/transactions/feed?pageSize=20&cursor=…` | The same, by cursor (keyset paging); pass each response's `nextCursor` to get the next page |
+| `GET /accounts/{id}/summary` | Balance, transaction count and last activity, computed from the whole history |
+| `POST /accounts/{id}/transactions` | Records a transaction, e.g. `{"amount": -100.00, "description": "Card payment"}` (for the labs, not a real transfer) |
 
 To start again from scratch, run `docker compose down -v` (this deletes the data), then repeat the steps above.
 
@@ -45,7 +47,12 @@ To seed less data on a slower machine: `dotnet run --project src/Bank.Api -- see
 ## Lab tools
 
 - **Load generator.** `dotnet run --project tools/Bank.Load -- --seconds 20 --concurrency 8` sends requests for random accounts and reports latency percentiles. Use `--path` to target another endpoint, for example `--path "/accounts/{id}/transactions/feed"`.
-- **Switching implementations.** The transactions endpoint has two versions you can measure against each other: `dotnet run --project src/Bank.Api -- --Lab:Transactions=Projected` (the default is `Naive`).
+- **Hot accounts.** Add `--hot 0.8 --hot-accounts 100` to the load generator to send 80% of requests to the 100 busiest accounts.
+- **Switching implementations.** Several endpoints have versions you can measure against each other, chosen at startup:
+  - `--Lab:Transactions=Naive|Projected|Blocking` for the transactions page (default `Naive`)
+  - `--Lab:Summary=None|CacheAside|Hybrid` and `--Lab:CacheSeconds=30` for the summary (default `None`)
+  - `"--ConnectionStrings:Bank=Host=localhost;Port=5433;Database=bank;Username=bank;Password=bank;Maximum Pool Size=10"` to change the connection pool
+- **A second instance.** `dotnet run --project src/Bank.Api --no-launch-profile -- --urls http://localhost:5081` runs another copy on port 5081.
 - **Seeing the SQL.** Add `--Logging:LogLevel:Microsoft.EntityFrameworkCore.Database.Command=Information` to log every query EF runs, with its duration.
 - **Query statistics.** Postgres records every query's call count and time in `pg_stat_statements`. Enable it once with `docker compose exec postgres psql -U bank -d bank -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements"`.
 

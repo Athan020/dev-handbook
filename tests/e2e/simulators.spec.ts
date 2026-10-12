@@ -57,3 +57,26 @@ test.describe('connection pool simulator', () => {
     await expect(sim.getByRole('button', { name: 'Comfortable', exact: true })).toHaveAttribute('aria-pressed', 'false')
   })
 })
+
+test.describe('cache stampede simulator', () => {
+  const url = '/backend/journeys/your-api-gets-popular/05-cache-then-invalidate'
+  // The first expiry happens at 5 s; by 9 s every strategy has been through one.
+
+  test('every miss recomputing piles up duplicate queries', async ({ page }) => {
+    const sim = await runScenario(page, url, 'Every miss recomputes', 9)
+    expect(await statNumber(sim, 'peak')).toBeGreaterThan(50)
+    expect(await statNumber(sim, 'slowest')).toBeGreaterThan(2000)
+  })
+
+  test('coalescing runs one recompute at a time', async ({ page }) => {
+    const sim = await runScenario(page, url, 'One recompute, others wait', 9)
+    expect(await statNumber(sim, 'peak')).toBe(1)
+    expect(await statNumber(sim, 'slowest')).toBeLessThan(1000)
+  })
+
+  test('serving stale keeps latency low but serves data older than the TTL', async ({ page }) => {
+    const sim = await runScenario(page, url, 'Serve stale while refreshing', 9)
+    expect(await statNumber(sim, 'slowest')).toBeLessThan(50)
+    expect(await statNumber(sim, 'oldest')).toBeGreaterThan(5000)
+  })
+})

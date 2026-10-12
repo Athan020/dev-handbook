@@ -1,5 +1,6 @@
 import DefaultTheme from 'vitepress/theme'
 import type { Theme } from 'vitepress'
+import CacheSimulator from './components/CacheSimulator.vue'
 import MermaidDiagram from './components/MermaidDiagram.vue'
 import PoolSimulator from './components/PoolSimulator.vue'
 import SqlPlayground from './components/SqlPlayground.vue'
@@ -13,5 +14,6 @@ export default {
     app.component('StopAndThink', StopAndThink)
     app.component('SqlPlayground', SqlPlayground)
     app.component('PoolSimulator', PoolSimulator)
+    app.component('CacheSimulator', CacheSimulator)
   },
 } satisfies Theme

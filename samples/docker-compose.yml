@@ -8,7 +8,7 @@ services:
     command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
     # Docker's default 64 MB of shared memory is too little for parallel queries and big
     # sorts under load ("could not resize shared memory segment ... No space left on device").
-    shm_size: 512mb
+    shm_size: 1gb
     environment:
       POSTGRES_DB: bank
       POSTGRES_USER: bank
