@@ -15,7 +15,10 @@
 // involving it, in parallel: the tightly packed events that B2 stage 5 needs. Then it exits.
 //
 // --payroll N posts exactly N salary transfers, --concurrency at a time, as fast as the API
-// accepts them: the burst that B2 stage 7 needs. Then it exits.
+// accepts them: the burst that B2 stage 7 needs. Then it exits. Add --employer to send them
+// all from one newly opened account (B3 stage 2).
+//
+// --crossfire N sends N transfers between two new accounts, alternating direction (B3 stage 2).
 //
 // --race N runs rounds of a race (B3 stage 1): open an account, deposit --deposit (default 100),
 // then send N transfers of --amount (default 60) from it, all at once. It reports how the API
@@ -87,7 +90,7 @@ if (Array.IndexOf(args, "--race") is var raceAt and >= 0)
     }
 
     Console.WriteLine($"{rounds} rounds: deposit {deposit}, then {racers} transfers of {amount} at once.");
-    Console.WriteLine($"Responses: {string.Join(", ", statuses.OrderBy(s => s.Key).Select(s => $"{s.Key} x {s.Value}"))}");
+    Console.WriteLine($"Responses: {string.Join(", ", statuses.OrderBy(s => s.Key).Select(s => $"{(s.Key == 0 ? "timed out" : s.Key)} x {s.Value}"))}");
     Console.WriteLine($"Overdrawn after {overdrawn} of {rounds} rounds; lowest balance {lowest}.");
     return;
 
@@ -104,23 +107,67 @@ int Arg(string name, int fallback) =>
 if (Array.IndexOf(args, "--payroll") is var payrollAt and >= 0)
 {
     var count = int.Parse(args[payrollAt + 1], CultureInfo.InvariantCulture);
+    // --employer: every salary comes from one newly opened, well-funded account (B3 stage 2's hot account).
+    int? employer = args.Contains("--employer") ? await OpenFundedAsync("Employer", count * 1000m * 2) : null;
+    var result = await BurstAsync(count, i => new
+    {
+        fromAccountId = employer ?? 22 + i % 50, toAccountId = 80 + i % 50, amount = 1000m, reference = "Payroll",
+    });
+    Console.WriteLine($"Posted {count} salary transfers{(employer is null ? "" : $" from one account ({employer})")} in {result.Seconds:F1}s: {result}");
+    return;
+}
+
+// --crossfire N (B3 stage 2): two accounts paying each other, A to B and B to A, N transfers in all.
+if (Array.IndexOf(args, "--crossfire") is var crossAt and >= 0)
+{
+    var count = int.Parse(args[crossAt + 1], CultureInfo.InvariantCulture);
+    var a = await OpenFundedAsync("Crossfire A", 1_000_000m);
+    var b = await OpenFundedAsync("Crossfire B", 1_000_000m);
+    var result = await BurstAsync(count, i => i % 2 == 0
+        ? new { fromAccountId = a, toAccountId = b, amount = 10m, reference = "Crossfire" }
+        : new { fromAccountId = b, toAccountId = a, amount = 10m, reference = "Crossfire" });
+    Console.WriteLine($"Posted {count} transfers between accounts {a} and {b} in {result.Seconds:F1}s: {result}");
+    return;
+}
+
+async Task<int> OpenFundedAsync(string name, decimal deposit)
+{
+    var opened = await http.PostAsJsonAsync("/accounts", new { holderName = name });
+    var id = (await opened.Content.ReadFromJsonAsync<OpenedAccount>())!.Id;
+    (await http.PostAsJsonAsync($"/accounts/{id}/transactions", new { amount = deposit, description = "Deposit" })).EnsureSuccessStatusCode();
+    return id;
+}
+
+// Sends `count` transfers, --concurrency at a time, and reports the responses and latencies.
+async Task<BurstResult> BurstAsync(int count, Func<int, object> transfer)
+{
     var next = 0;
-    var accepted = 0;
+    var statuses = new System.Collections.Concurrent.ConcurrentDictionary<int, int>();
+    var latencies = new System.Collections.Concurrent.ConcurrentBag<double>();
     var timer = Stopwatch.StartNew();
     await Task.WhenAll(Enumerable.Range(0, options.Concurrency).Select(async _ =>
     {
         while (Interlocked.Increment(ref next) is var i && i <= count)
         {
-            var transfer = new { fromAccountId = 22 + i % 50, toAccountId = 80 + i % 50, amount = 1000m, reference = "Payroll" };
-            using var response = await http.PostAsJsonAsync("/transfers", transfer);
-            if (response.IsSuccessStatusCode)
+            var started = Stopwatch.GetTimestamp();
+            int status;
+            try
             {
-                Interlocked.Increment(ref accepted);
+                using var response = await http.PostAsJsonAsync("/transfers", transfer(i));
+                status = (int)response.StatusCode;
             }
+            catch (TaskCanceledException)
+            {
+                status = 0; // no answer within the client's timeout
+            }
+            latencies.Add(Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+            statuses.AddOrUpdate(status, 1, (_, n) => n + 1);
         }
     }));
-    Console.WriteLine($"Posted {count} salary transfers in {timer.Elapsed.TotalSeconds:F0}s; {accepted} accepted.");
-    return;
+    var sorted = latencies.Order().ToArray();
+    double At(double p) => sorted[Math.Min(sorted.Length - 1, (int)Math.Ceiling(p * sorted.Length) - 1)];
+    return new BurstResult(timer.Elapsed.TotalSeconds, count / timer.Elapsed.TotalSeconds,
+        string.Join(", ", statuses.OrderBy(s => s.Key).Select(s => $"{(s.Key == 0 ? "timed out" : s.Key)} x {s.Value}")), At(0.5), At(0.99), sorted[^1]);
 }
 
 Console.WriteLine($"{options.Concurrency} workers for {options.Seconds}s against {options.Url}{(options.Transfers ? "/transfers (POST)" : options.Path)}");
@@ -185,6 +232,12 @@ static double Percentile(double[] sorted, double p) =>
 sealed record OpenedAccount(int Id);
 
 sealed record Summary(decimal Balance);
+
+sealed record BurstResult(double Seconds, double PerSecond, string Statuses, double P50, double P99, double Max)
+{
+    public override string ToString() =>
+        $"{PerSecond:F0} transfers/s; responses {Statuses}; latency p50 {P50:F0} ms, p99 {P99:F0} ms, max {Max:F0} ms";
+}
 
 sealed record Options(string Url, string Path, int Concurrency, int Seconds, int Accounts, double Hot, int HotAccounts, bool Transfers)
 {

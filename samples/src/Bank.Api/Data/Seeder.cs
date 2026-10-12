@@ -64,6 +64,9 @@ public static class Seeder
             log.WriteLine($"  {end:N0} / {options.Transactions:N0} transactions");
         }
 
+        log.WriteLine("Setting stored balances...");
+        await db.Database.ExecuteSqlRawAsync(ReadSql("balances.sql"), ct);
+
         await db.Database.ExecuteSqlRawAsync("RESET session_replication_role", ct);
         await db.Database.ExecuteSqlRawAsync("RESET synchronous_commit", ct);
     }

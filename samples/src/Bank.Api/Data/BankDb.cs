@@ -27,6 +27,8 @@ public sealed class BankDb(DbContextOptions<BankDb> options) : DbContext(options
             account.ToTable("accounts");
             account.Property(a => a.HolderName).HasMaxLength(200);
             account.Property(a => a.Currency).HasMaxLength(3).IsFixedLength();
+            account.Property(a => a.Balance).HasPrecision(18, 2).HasDefaultValue(0m);
+            account.Property(a => a.BalanceVersion).HasDefaultValue(0);
         });
 
         model.Entity<Transaction>(transaction =>

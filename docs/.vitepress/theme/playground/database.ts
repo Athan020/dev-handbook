@@ -8,6 +8,7 @@ import type { PGlite, Results } from '@electric-sql/pglite'
 import schemaSql from '../../../../samples/src/Bank.Api/Data/Seed/schema.sql?raw'
 import accountsSql from '../../../../samples/src/Bank.Api/Data/Seed/accounts.sql?raw'
 import transactionsSql from '../../../../samples/src/Bank.Api/Data/Seed/transactions.sql?raw'
+import balancesSql from '../../../../samples/src/Bank.Api/Data/Seed/balances.sql?raw'
 
 export const DATASET = { accounts: 5_000, transactions: 250_000 } as const
 
@@ -29,6 +30,7 @@ async function create(): Promise<PGlite> {
   await db.exec('SELECT setseed(0.42); SET session_replication_role = replica;')
   await db.exec(fill(accountsSql, values))
   await db.exec(fill(transactionsSql, values))
+  await db.exec(balancesSql)
   await db.exec('RESET session_replication_role; ANALYZE;')
   return db
 }

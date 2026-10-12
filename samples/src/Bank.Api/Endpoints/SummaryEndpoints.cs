@@ -134,8 +134,16 @@ public static class SummaryEndpoints
             Description = input.Description,
             CreatedAt = DateTimeOffset.UtcNow,
         };
-        db.Transactions.Add(transaction);
-        await db.SaveChangesAsync(ct);
+        // B3 stage 2: keep the stored balance in step with the history, in the same transaction.
+        await using (var dbTransaction = await db.Database.BeginTransactionAsync(ct))
+        {
+            db.Transactions.Add(transaction);
+            await db.SaveChangesAsync(ct);
+            await db.Accounts.Where(a => a.Id == id).ExecuteUpdateAsync(set => set
+                .SetProperty(a => a.Balance, a => a.Balance + input.Amount)
+                .SetProperty(a => a.BalanceVersion, a => a.BalanceVersion + 1), ct);
+            await dbTransaction.CommitAsync(ct);
+        }
 
         // #region invalidate
         // Invalidate after the write has committed, so a reader can't re-cache the old value

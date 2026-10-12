@@ -176,6 +176,14 @@ public static class TransferEndpoints
             return null; // nothing written; disposing the transaction rolls it back
         }
 
+        // B3 stage 2: Lab:LockLate=true writes everything else first and changes the balances
+        // last, so the account rows stay locked only from that point until the commit.
+        var lockLate = config.GetValue("Lab:LockLate", false);
+        if (!lockLate && !await Funds.MoveAsync(db, request, config, ct))
+        {
+            return null; // the stored balance can't cover it; rolling back undoes any change made
+        }
+
         var now = DateTimeOffset.UtcNow;
         var transfer = new TransferCompleted(
             Guid.CreateVersion7(), request.FromAccountId, request.ToAccountId, request.Amount, request.Reference, now);
@@ -222,6 +230,15 @@ public static class TransferEndpoints
         }
 
         await db.SaveChangesAsync(ct);
+
+        // #region lock-late
+        // Everything else is written; now lock and change the balances, and commit straight away.
+        if (lockLate && !await Funds.MoveAsync(db, request, config, ct))
+        {
+            return null; // rolling back also removes the rows written above
+        }
+        // #endregion lock-late
+
         await dbTransaction.CommitAsync(ct);
         return transfer;
     }

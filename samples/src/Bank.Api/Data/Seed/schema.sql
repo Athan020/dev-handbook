@@ -4,6 +4,8 @@ CREATE TABLE accounts (
     currency character(3) NOT NULL,
     opened_at timestamp with time zone NOT NULL,
     version integer NOT NULL DEFAULT 1,
+    balance numeric(18,2) NOT NULL DEFAULT 0.0,
+    balance_version integer NOT NULL DEFAULT 0,
     CONSTRAINT pk_accounts PRIMARY KEY (id)
 );
 
