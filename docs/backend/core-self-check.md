@@ -10,7 +10,7 @@ The backend journeys start from something you already own: a working REST API ba
 
 Use this page to check yourself quickly. If an answer doesn't come easily, follow the links; they're better introductions than this handbook would be. You don't need to be an expert in any of this, just comfortable.
 
-**Journey B1 (Your API gets popular) assumes:** HTTP and REST, SQL basics, and async/await in C#.
+**Journeys B1 (Your API gets popular) and B2 (Work that shouldn't happen in the request) assume:** HTTP and REST, SQL basics including transactions, and async/await in C#. B2 introduces messaging itself, from its first stage.
 
 ## HTTP and REST
 
@@ -62,6 +62,12 @@ ORDER BY transactions DESC;
 ::: think You want every transaction with its counterparty's name, including transactions that have no counterparty. Which join?
 
 A `LEFT JOIN` from transactions to accounts on the counterparty id. An inner join would drop the transactions without a counterparty, because they have nothing to join to.
+
+:::
+
+::: think A transfer runs two UPDATEs: debit one account, credit the other. The server crashes between them. What's left in the database, with and without a transaction around both?
+
+Without a transaction, the debit is saved and the credit never happens: money has disappeared. With one, nothing was committed when the server crashed, so the database rolls the debit back and both balances are unchanged. A transaction makes its changes all-or-nothing, but only within one database. A message sent to a broker during the transaction isn't rolled back with it, which is the problem B2 stage 4 solves.
 
 :::
 
