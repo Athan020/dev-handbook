@@ -3,7 +3,7 @@
 > A VitePress site for building **T-shaped** software engineering skills, organised by orientation (frontend or backend). It is meant to help engineers grow in their current role and prepare for multi-round interviews. It teaches judgement: creative problem solving that still respects good practice.
 
 **Plan version:** v2 (journey-based). Supersedes v1, which was topic-based and migration-first. See §9.
-**Status:** Phase 3 complete, awaiting review (2026-10-12). Phase 2 complete and approved (2026-10-12).
+**Status:** Phase 4 in progress (started 2026-10-12): proposing B3. Phase 3 complete and approved (2026-10-12).
 **Owner:** Athan
 **Source material:** `_source/backend-engineer-kb/` is a **quarry, not a blueprint**. See §6.
 
@@ -274,7 +274,7 @@ Link to each platform's official candidate help pages instead of restating their
 
 ### Phase 4 — Backend journeys B3–B9
 
-Order: **B3 → B4 → B5 → B6 → B7 → B8 → B9.** For each journey, first propose the full stage table and capstone and get approval, then write it. Create `backend/reference/` pages only when two or more journeys need the same concept, for example idempotency (B2, B3, B4) and a troubleshooting method (B1, B4, B7, B8). Where they help, B7 and B8 use the Phase 1 interactive patterns: a container-throttling simulator, an "investigate this incident" exercise where the reader chooses what to check next, and a defect-triage ranking exercise. Add networking basics (HTTP, DNS, TCP) to `backend/core-self-check.md` before writing B7.
+Order: **B3 → B4 → B5 → B6 → B7 → B8 → B9.** For each journey, first propose the full stage table and capstone and get approval, then write it, then stop for a full review before proposing the next journey (decided 2026-10-12: a wrong turn is cheaper to catch after one journey than after seven). Create `backend/reference/` pages only when two or more journeys need the same concept, for example idempotency (B2, B3, B4) and a troubleshooting method (B1, B4, B7, B8). Where they help, B7 and B8 use the Phase 1 interactive patterns: a container-throttling simulator, an "investigate this incident" exercise where the reader chooses what to check next, and a defect-triage ranking exercise. Add networking basics (HTTP, DNS, TCP) to `backend/core-self-check.md` before writing B7.
 
 **Done when:** all backend journeys are written and the interview stages page links each round to the journeys that prepare for it, including debugging and production-support rounds (B7, B8).
 

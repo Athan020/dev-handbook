@@ -46,7 +46,7 @@ For each stage: search `_source/` for relevant notes, reuse only what is correct
 - For SQL the reader should run, use a ` ```sql playground ` block: it runs against real Postgres in the browser, seeded like the lab database but smaller (5,000 accounts, 250,000 transactions). Playgrounds on one page share a database, so an index created in one is used by the next.
 - Present options as an escalation ladder, simplest and cheapest first. Always say what each option breaks and when not to use it.
 - Explain concepts in language-neutral terms. Use C# for backend code.
-- Code must compile. Wrong code appears only inside a `::: trap` block, explicitly framed as "spot the bug".
+- Code must compile. Wrong code appears only inside a `::: trap` block, explicitly framed as "spot the bug". The one exception: starting code for a practice task (such as `samples/assessments/Set4.Project/Problems/`) may contain deliberate bugs when the task says so, and it is never shown on a page.
 - Do not hard-code vendor limits, quotas or prices. Link to official docs.
 - Banking is the recurring example domain. Do not include company-specific or job-application content.
 - For fundamentals and algorithm drills, write a short self-check and link out instead of re-teaching what good resources already cover.
