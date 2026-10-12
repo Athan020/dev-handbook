@@ -3,7 +3,7 @@
 > A VitePress site for building **T-shaped** software engineering skills, organised by orientation (frontend or backend). It is meant to help engineers grow in their current role and prepare for multi-round interviews. It teaches judgement: creative problem solving that still respects good practice.
 
 **Plan version:** v2 (journey-based). Supersedes v1, which was topic-based and migration-first. See §9.
-**Status:** Phase 4 in progress (started 2026-10-12): proposing B3. Phase 3 complete and approved (2026-10-12).
+**Status:** Phase 4 in progress (started 2026-10-12): writing B3. Phase 3 complete and approved (2026-10-12).
 **Owner:** Athan
 **Source material:** `_source/backend-engineer-kb/` is a **quarry, not a blueprint**. See §6.
 
@@ -116,7 +116,18 @@ docs/
 | 7 | The queue keeps growing: backpressure, consumer scaling, lag monitoring | Month-end batch run |
 | ★ | Capstone: "Design a multi-channel notification system" | — |
 
-**B3 — The money must add up** *(Phase 4)*: transactions and isolation anomalies (lost update, write skew), optimistic vs pessimistic concurrency, idempotency keys on the API, double-entry ledgers, reconciliation. Capstone: *design a transfer between accounts*.
+**B3 — The money must add up** *(Phase 4, approved 2026-10-12)*
+
+| # | Stage | Triggered by |
+|---|---|---|
+| 1 | Check, then act: why a balance check in a transaction isn't safe; isolation levels and the anomalies each allows (lost update, write skew) | "Two transfers at the same moment overdrew an account that only had money for one" |
+| 2 | Locks or versions: conditional updates, `SELECT ... FOR UPDATE`, optimistic concurrency with retry, serializable with retry; deadlocks, lock ordering, hot accounts | "Locking fixed it, but payroll from one employer's account now queues, and deadlocks appear in the logs" |
+| 3 | Paid twice: idempotency keys on the API (same transaction, concurrent duplicates, same key with a different body, expiry) | "The app timed out, the customer tapped Pay again, and the money moved twice" |
+| 4 | Cents that go missing: `decimal` vs floating point, minor units, rounding rules, allocating remainders | "Fees split three ways don't add up to the fee charged" |
+| 5 | A ledger you can audit: double-entry, immutable entries, reversals, stored vs derived balances | "Someone corrected a balance with an `UPDATE`, and now the balance and the history disagree" |
+| 6 | When money leaves your database: pending states, holds, unknown outcomes after a timeout, the other side's reference (sagas are B5; retries and timeouts are B4) | "The payment network timed out. Did the money go?" |
+| 7 | Reconciliation: matching the ledger against the other side, timing differences vs breaks, daily close | "The network's settlement file says we sent more than our ledger does" |
+| ★ | Capstone: "Design a transfer between accounts" | — |
 
 **B4 — Things fail** *(Phase 4)*: timeouts (connect vs request timeouts, propagating deadlines between services), retries with backoff and jitter, circuit breakers and bulkheads, graceful degradation, rate limiting. Capstone: *design a rate limiter*.
 
@@ -199,6 +210,7 @@ Do not carry these over as correct. Use them as "spot the bug" material where th
 | `03-architecture/event-driven-architecture.md` — `TransactionService`, `EventSourcedAccountRepository` | Saves to the database and then publishes, so a crash in between loses the event (dual write). | B2 stage 4 |
 | `06-cloud/messaging-events.md` — `EnqueueBatchAsync` | Reassigns a `using var` variable, which does not compile. | B2 (minor trap) |
 | `02-system-design/idempotency.md` — `PaymentService` | Debits and credits across services with no transaction or compensation, and stores the idempotency result in a cache separately from the database write. | B3 |
+| `01-fundamentals/cap-theorem.md` | Presents CAP as "pick two" categories per product, and mislabels PACELC examples: Cassandra and DynamoDB default to latency over consistency when there's no partition (PA/EL), not PA/EC. | Phase 6 consistency reference |
 
 ## 9. Changes from v1
 
@@ -290,6 +302,7 @@ Order: **B3 → B4 → B5 → B6 → B7 → B8 → B9.** For each journey, first
 - Per-journey progress checklists (localStorage, try/catch, works without storage).
 - Two suggested paths per track: **growth** (journeys in order) and **interview in two weeks** (capstones first, then the stages they lean on, plus assessments).
 - Accessibility and mobile pass, and a link checker in CI.
+- Revisit (raised 2026-10-12): CAP and PACELC aren't covered anywhere. Proposed home: a `backend/reference/` page on consistency (CAP as a choice during partitions, linearizability vs ACID consistency, PACELC's latency-vs-consistency trade-off, tunable consistency), linked from B1 stage 6, B2, B3 and B5. Also run a gap check of classic system-design interview topics (quorums, consensus and leader election, two-phase commit, clocks) against the journeys, and report where each belongs.
 
 ## 11. Open questions
 
