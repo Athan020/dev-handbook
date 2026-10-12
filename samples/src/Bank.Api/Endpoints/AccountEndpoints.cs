@@ -61,10 +61,11 @@ public static class AccountEndpoints
         return items is null ? Results.NotFound() : Results.Ok(new TransactionPage(page, pageSize, items));
     }
 
-    // #region naive
     // The version that "works in development": correct, but written without thinking about
     // scale. One query to check the account exists, one for the page, then one more per
-    // transfer to look up the counterparty's name: the N+1 query problem.
+    // transfer to look up the counterparty's name: the N+1 query problem. (This comment sits
+    // outside the region below because B1 stage 3 shows that code as a "spot the bug".)
+    // #region naive
     private static async Task<List<TransactionResponse>?> NaivePageAsync(
         BankDb db, int id, int page, int pageSize, CancellationToken ct)
     {

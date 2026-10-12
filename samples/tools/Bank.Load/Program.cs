@@ -53,9 +53,12 @@ foreach (var (label, p) in new[] { ("p50", 0.50), ("p90", 0.90), ("p95", 0.95), 
 }
 Console.WriteLine($"max       {all[^1],8:N1} ms");
 
+// #region percentile
 // Nearest-rank percentile: the smallest sample with at least p of the samples at or below it.
+// The input must already be sorted (see `.Order()` above).
 static double Percentile(double[] sorted, double p) =>
     sorted[Math.Clamp((int)Math.Ceiling(p * sorted.Length) - 1, 0, sorted.Length - 1)];
+// #endregion percentile
 
 sealed record Options(string Url, string Path, int Concurrency, int Seconds, int Accounts)
 {

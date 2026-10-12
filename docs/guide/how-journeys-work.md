@@ -25,7 +25,7 @@ Every stage starts from a **trigger**: a symptom you'd actually see, such as a s
 
 1. "The transactions endpoint is slow at peak" leads to **measuring first**.
 2. Measuring shows the query plan doing a full scan, which leads to **indexes and query shape**.
-3. The query is now indexed, but each request still runs hundreds of queries, which leads to **what the ORM is doing**.
+3. The query is now indexed, but each request still runs a query per row, which leads to **what the ORM is doing**.
 
 The order matters. Each stage teaches the cheaper fix before the expensive one, so you learn to diagnose before you reach for read replicas or sharding. In an interview, that order is often what separates a strong answer from a list of buzzwords.
 

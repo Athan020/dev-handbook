@@ -7,6 +7,8 @@ export interface DocPage {
   url: string
   /** Number of ```mermaid blocks in the source */
   diagrams: number
+  /** Number of ```sql playground blocks in the source */
+  playgrounds: number
 }
 
 const ignored = ['.vitepress/**', '_templates/**']
@@ -18,6 +20,8 @@ export const pages: DocPage[] = globSync('**/*.md', { cwd: 'docs', exclude: igno
     file,
     url: '/' + file.replace(/(^|\/)index\.md$/, '$1').replace(/\.md$/, ''),
     diagrams: (readFileSync(`docs/${file}`, 'utf8').match(/^```mermaid\s*$/gm) ?? []).length,
+    playgrounds: (readFileSync(`docs/${file}`, 'utf8').match(/^```sql playground\s*$/gm) ?? []).length,
   }))
 
 export const diagramPages = pages.filter((p) => p.diagrams > 0)
+export const playgroundPages = pages.filter((p) => p.playgrounds > 0)

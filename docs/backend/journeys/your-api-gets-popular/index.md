@@ -26,7 +26,7 @@ flowchart TB
   S7["7. Writes outgrow one box"]
   START(["You own a working API"]) -->|"The transactions endpoint is slow at peak"| S1
   S1 -->|"The plan shows a full scan"| S2
-  S2 -->|"Indexed, but still hundreds of queries per request"| S3
+  S2 -->|"Indexed, but each request still runs a query per row"| S3
   S3 -->|"Fast queries, but requests queue under load"| S4
   S4 -->|"The same hot reads, thousands of times a second"| S5
   S5 -->|"Cache misses and uncachable reads still saturate the primary"| S6
@@ -38,7 +38,7 @@ flowchart TB
 |---|---|---|
 | 1 | [Measure first](./01-measure-first): Latency percentiles, where time goes (app, database or network), reading a query plan | The transactions endpoint is slow at peak |
 | 2 | [Indexes and query shape](./02-indexes-and-query-shape): Composite, covering, selectivity, SARGable queries | The plan shows a full scan |
-| 3 | [What is the ORM doing?](./03-what-is-the-orm-doing): N+1, over-fetching, offset vs keyset pagination | Indexed, but still hundreds of queries per request |
+| 3 | [What is the ORM doing?](./03-what-is-the-orm-doing): N+1, over-fetching, offset vs keyset pagination | Indexed, but each request still runs a query per row |
 | 4 | [Too many connections](./04-too-many-connections): Pool exhaustion, async all the way, timeouts | Fast queries, but requests queue under load |
 | 5 | [Cache it, then invalidate it](./05-cache-then-invalidate): Cache-aside, TTLs, stampedes | The same hot reads, thousands of times a second |
 | 6 | [Reads outgrow one box](./06-read-replicas): Read replicas, replication lag, read-your-writes | Cache misses and uncachable reads still saturate the primary |

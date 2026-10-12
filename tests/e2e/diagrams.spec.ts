@@ -61,7 +61,8 @@ for (const { url, file, diagrams } of diagramPages) {
       const lightStyles: string[] = []
       for (let i = 0; i < diagrams; i++) {
         const svg = diagram(page).nth(i)
-        await expect(svg.locator('g.node, g.nodes > g').first()).toBeVisible()
+        // Any diagram type: flowcharts label nodes with HTML, sequence diagrams with SVG text.
+        await expect(svg.locator('foreignObject, text').filter({ visible: true }).first()).toBeVisible()
         const box = await svg.boundingBox()
         expect(box?.width, 'diagram width').toBeGreaterThan(50)
         expect(box?.height, 'diagram height').toBeGreaterThan(20)

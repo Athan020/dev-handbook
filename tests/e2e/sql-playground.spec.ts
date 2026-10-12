@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { playgroundPages } from './pages'
 
 // The live example on the module-format guide page. Its starting query is an
 // EXPLAIN ANALYZE of one account's newest transactions.
@@ -86,3 +87,20 @@ test('reports SQL errors, runs with Ctrl+Enter, and restores the starting query'
   await expect(editor(page)).toHaveValue(/EXPLAIN ANALYZE/)
   await expect(playground(page).getByRole('button', { name: 'Restore query' })).toHaveCount(0)
 })
+
+// Every playground on every page must run its starting SQL cleanly, in page order
+// (later playgrounds can depend on earlier ones, as readers are told to run them in order).
+for (const { url, file, playgrounds } of playgroundPages) {
+  test(`all ${playgrounds} playground(s) run cleanly in order: ${file}`, async ({ page }) => {
+    await page.goto(url)
+    const all = page.locator('.sql-playground')
+    await expect(all).toHaveCount(playgrounds)
+    for (let i = 0; i < playgrounds; i++) {
+      const pg = all.nth(i)
+      await pg.getByRole('button', { name: 'Run' }).click()
+      await expect(pg.getByRole('button', { name: /Run|Starting|Running/ })).toHaveText('Run', STARTUP)
+      expect(await pg.getByRole('alert').allInnerTexts(), `playground ${i + 1} on ${file}`).toEqual([])
+      await expect(pg.locator('.results')).toBeVisible()
+    }
+  })
+}

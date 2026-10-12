@@ -96,7 +96,7 @@ docs/
 |---|---|---|
 | 1 | Measure first: latency percentiles, where time goes (app, database or network), reading a query plan | "The transactions endpoint is slow at peak" |
 | 2 | Indexes and query shape: composite, covering, selectivity, SARGable queries | The plan shows a full scan |
-| 3 | What is the ORM doing? N+1, over-fetching, offset vs keyset pagination | Indexed, but still hundreds of queries per request |
+| 3 | What is the ORM doing? N+1, over-fetching, offset vs keyset pagination | Indexed, but each request still runs a query per row |
 | 4 | Too many connections: pool exhaustion, async all the way, timeouts | Fast queries, but requests queue under load |
 | 5 | Cache it, then invalidate it: cache-aside, TTLs, stampedes | The same hot reads, thousands of times a second |
 | 6 | Reads outgrow one box: read replicas, replication lag, read-your-writes | Cache misses and uncachable reads still saturate the primary |
