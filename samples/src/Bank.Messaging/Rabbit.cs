@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
+using Bank.Sharding;
 using RabbitMQ.Client;
 
 namespace Bank.Messaging;
@@ -18,6 +19,21 @@ public static class Rabbit
     public const string FraudQueue = "fraud.transfer-completed";
     public const string RewardsQueue = "rewards.transfer-completed";
     public const string TransfersStream = "transfers.history";
+
+    // Stage 5: per-account events, for the statements service.
+    public const string AccountsExchange = "accounts";
+    public const string StatementsSharedQueue = "statements.all";
+    public const int StatementPartitions = 4;
+    public static string StatementPartitionQueue(int partition) => $"statements.p{partition}";
+
+    // #region partition-key
+    /// <summary>
+    /// Routing key for an account event: account.{partition}.{event}. The partition comes from a
+    /// stable hash of the account id, so every event for one account goes to the same partition.
+    /// </summary>
+    public static string AccountRoutingKey(int accountId, string eventName) =>
+        $"account.{StableHash.Of($"account:{accountId}") % StatementPartitions}.{eventName}";
+    // #endregion partition-key
 
     public static ConnectionFactory Factory(IConfiguration config, string clientName) => new()
     {
@@ -55,6 +71,27 @@ public static class Rabbit
         await channel.QueueBindAsync(TransfersStream, TransfersExchange, TransferCompletedKey, cancellationToken: ct);
     }
     // #endregion topology
+
+    // #region account-topology
+    public static async Task DeclareAccountTopologyAsync(IChannel channel, CancellationToken ct)
+    {
+        await channel.ExchangeDeclareAsync(AccountsExchange, ExchangeType.Topic, durable: true, cancellationToken: ct);
+
+        // One shared queue for every account event. Several consumers on it share the work,
+        // and lose the order of events for any one account.
+        await channel.QueueDeclareAsync(StatementsSharedQueue, durable: true, exclusive: false, autoDelete: false, cancellationToken: ct);
+        await channel.QueueBindAsync(StatementsSharedQueue, AccountsExchange, "account.#", cancellationToken: ct);
+
+        // Or one queue per partition. A single active consumer per queue keeps each account's
+        // events in order; different partitions are still processed in parallel.
+        for (var p = 0; p < StatementPartitions; p++)
+        {
+            await channel.QueueDeclareAsync(StatementPartitionQueue(p), durable: true, exclusive: false, autoDelete: false,
+                arguments: new Dictionary<string, object?> { ["x-single-active-consumer"] = true }, cancellationToken: ct);
+            await channel.QueueBindAsync(StatementPartitionQueue(p), AccountsExchange, $"account.{p}.*", cancellationToken: ct);
+        }
+    }
+    // #endregion account-topology
 
     public static byte[] Serialize<T>(T message) => JsonSerializer.SerializeToUtf8Bytes(message, JsonSerializerOptions.Web);
 

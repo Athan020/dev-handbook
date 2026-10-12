@@ -4,4 +4,7 @@
     <PackageReference Include="Npgsql" />
     <PackageReference Include="RabbitMQ.Client" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Bank.Sharding/Bank.Sharding.csproj" />
+  </ItemGroup>
 </Project>

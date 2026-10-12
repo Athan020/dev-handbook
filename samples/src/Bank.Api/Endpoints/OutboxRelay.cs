@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using System.Text.Json;
+using System.Text;
 using Bank.Api.Data;
 using Bank.Messaging;
 using Microsoft.EntityFrameworkCore;
@@ -55,7 +55,7 @@ public sealed class OutboxRelay(IServiceScopeFactory scopes, RabbitPublisher pub
             .FromSql($"""
                 SELECT * FROM outbox_messages
                 WHERE published_at IS NULL
-                ORDER BY created_at
+                ORDER BY position
                 LIMIT {BatchSize}
                 FOR UPDATE SKIP LOCKED
                 """)
@@ -64,10 +64,11 @@ public sealed class OutboxRelay(IServiceScopeFactory scopes, RabbitPublisher pub
 
         foreach (var message in batch)
         {
-            var transfer = JsonSerializer.Deserialize<TransferCompleted>(message.Payload, JsonSerializerOptions.Web)!;
             // The message id is the outbox row's id, the same on every attempt, so consumers
-            // can recognize a republished event (stage 3).
-            await publisher.PublishAsync(Rabbit.TransfersExchange, Rabbit.TransferCompletedKey, transfer, message.Id.ToString(), ct);
+            // can recognise a republished event (stage 3). Rows are published in the order they
+            // were written (stage 5).
+            await publisher.PublishRawAsync(message.Exchange, message.RoutingKey, message.Type,
+                Encoding.UTF8.GetBytes(message.Payload), message.Id.ToString(), ct);
         }
 
         // Lab only: die after publishing and before marking the batch as sent.

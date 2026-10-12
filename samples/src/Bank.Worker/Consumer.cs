@@ -16,8 +16,12 @@ namespace Bank.Worker;
 /// unacknowledged messages it holds; Worker:Concurrency is how many it works on at once (stage 7).
 /// Worker:Idempotent makes email and rewards safe to repeat (stage 3). Worker:CrashChance
 /// simulates the process dying after the work but before the acknowledgement (stage 3).
+/// Worker:Retries chooses what happens to a message that fails (stage 6): Requeue (the
+/// default) puts it straight back; Backoff retries it after a delay, and dead-letters it after
+/// three attempts, or at once if it's malformed. Role "replay" moves dead letters back.
 /// </summary>
-public sealed class Consumer(IConfiguration config, IServiceScopeFactory scopes, ILogger<Consumer> log) : BackgroundService
+public sealed class Consumer(
+    IConfiguration config, IServiceScopeFactory scopes, IHostApplicationLifetime lifetime, ILogger<Consumer> log) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -26,6 +30,7 @@ public sealed class Consumer(IConfiguration config, IServiceScopeFactory scopes,
         var concurrency = config.GetValue<ushort>("Worker:Concurrency", 1);
         var idempotent = config.GetValue("Worker:Idempotent", false);
         var crashChance = config.GetValue("Worker:CrashChance", 0.0);
+        var backoff = config["Worker:Retries"] == "Backoff";
 
         await using var connection = await Rabbit.Factory(config, $"bank-worker-{role}").CreateConnectionAsync(stoppingToken);
         await using var channel = await connection.CreateChannelAsync(
@@ -33,6 +38,13 @@ public sealed class Consumer(IConfiguration config, IServiceScopeFactory scopes,
         await Rabbit.DeclareFollowUpQueueAsync(channel, stoppingToken);
         await Rabbit.DeclareTransferTopologyAsync(channel, stoppingToken);
         await channel.BasicQosAsync(prefetchSize: 0, prefetchCount: prefetch, global: false, stoppingToken);
+
+        if (role == "replay")
+        {
+            await ReplayDeadLettersAsync(channel, config["Worker:Queue"] ?? Rabbit.EmailQueue, stoppingToken);
+            lifetime.StopApplication(); // a one-off job: exit when done
+            return;
+        }
 
         // What each role does with one transfer: (services, transfer, message id) => work.
         var (queue, work) = role switch
@@ -47,13 +59,16 @@ public sealed class Consumer(IConfiguration config, IServiceScopeFactory scopes,
             _ => (Rabbit.FollowUpQueue, (s, t, _) => s.GetRequiredService<FollowUp>().RunAsync(t, stoppingToken)),
         };
 
+        if (backoff) await Retries.DeclareAsync(channel, queue, stoppingToken);
+
         var handled = 0;
         var consumer = new AsyncEventingBasicConsumer(channel);
         consumer.ReceivedAsync += async (_, delivery) =>
         {
-            var transfer = Rabbit.Deserialize<TransferCompleted>(delivery.Body);
+            TransferCompleted? transfer = null;
             try
             {
+                transfer = Rabbit.Deserialize<TransferCompleted>(delivery.Body);
                 await using var scope = scopes.CreateAsyncScope();
                 await work(scope.ServiceProvider, transfer, delivery.BasicProperties.MessageId ?? transfer.TransferId.ToString());
 
@@ -81,10 +96,24 @@ public sealed class Consumer(IConfiguration config, IServiceScopeFactory scopes,
             }
             catch (Exception e) when (e is not OperationCanceledException)
             {
-                // Put it back on the queue to try again. Simple, and dangerous for a message that
-                // can never succeed: stage 6 replaces this with retries and a dead-letter queue.
-                log.LogWarning("{Role}: transfer {TransferId} failed ({Error}); requeueing", role, transfer.TransferId, e.Message);
-                await channel.BasicNackAsync(delivery.DeliveryTag, multiple: false, requeue: true, stoppingToken);
+                var id = transfer?.TransferId.ToString() ?? delivery.BasicProperties.MessageId ?? "(unreadable)";
+                if (backoff)
+                {
+                    // Stage 6: move it to a retry queue or the dead-letter queue, then let it go.
+                    await Retries.HandleFailureAsync(channel, queue, delivery.Body, delivery.BasicProperties, e, stoppingToken);
+                    await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, stoppingToken);
+                    log.LogWarning("{Role}: message {Id} failed on attempt {Attempt} ({Error}); moved on", role, id,
+                        Retries.AttemptOf(delivery.BasicProperties) + 1, e.Message);
+                }
+                else
+                {
+                    // #region requeue
+                    // Put it back on the queue to try again, straight away. Fine for a blip;
+                    // for a message that can never succeed, an endless loop.
+                    log.LogWarning("{Role}: message {Id} failed ({Error}); requeueing", role, id, e.Message);
+                    await channel.BasicNackAsync(delivery.DeliveryTag, multiple: false, requeue: true, stoppingToken);
+                    // #endregion requeue
+                }
             }
         };
 
@@ -99,4 +128,27 @@ public sealed class Consumer(IConfiguration config, IServiceScopeFactory scopes,
         await Task.Delay(Timeout.Infinite, stoppingToken).ContinueWith(_ => { }, CancellationToken.None);
         if (role == "history") log.LogInformation("Read {Count} events from the stream in total", handled);
     }
+
+    // #region replay
+    // Move everything in a queue's dead-letter queue back onto the queue, with the attempt count
+    // reset: for after the cause is fixed. Then stop.
+    private async Task ReplayDeadLettersAsync(IChannel channel, string queue, CancellationToken ct)
+    {
+        var moved = 0;
+        while (await channel.BasicGetAsync(Retries.DeadLetterQueue(queue), autoAck: false, ct) is { } message)
+        {
+            var properties = new BasicProperties
+            {
+                MessageId = message.BasicProperties.MessageId,
+                Type = message.BasicProperties.Type,
+                ContentType = message.BasicProperties.ContentType,
+                Persistent = true,
+            };
+            await channel.BasicPublishAsync("", queue, mandatory: true, properties, message.Body, ct);
+            await channel.BasicAckAsync(message.DeliveryTag, multiple: false, ct);
+            moved++;
+        }
+        log.LogInformation("Replayed {Count} dead-lettered messages onto {Queue}", moved, queue);
+    }
+    // #endregion replay
 }

@@ -14,7 +14,11 @@ public sealed class RabbitPublisher(IConfiguration config) : IAsyncDisposable
     private IConnection? _connection;
     private IChannel? _channel;
 
-    public async Task PublishAsync<T>(string exchange, string routingKey, T message, string messageId, CancellationToken ct)
+    public Task PublishAsync<T>(string exchange, string routingKey, T message, string messageId, CancellationToken ct) =>
+        PublishRawAsync(exchange, routingKey, typeof(T).Name, Rabbit.Serialize(message), messageId, ct);
+
+    /// <summary>Publishes an already-serialised message, such as a row from the outbox.</summary>
+    public async Task PublishRawAsync(string exchange, string routingKey, string type, byte[] body, string messageId, CancellationToken ct)
     {
         await _lock.WaitAsync(ct);
         try
@@ -23,11 +27,11 @@ public sealed class RabbitPublisher(IConfiguration config) : IAsyncDisposable
             var properties = new BasicProperties
             {
                 MessageId = messageId,
-                Type = typeof(T).Name,
+                Type = type,
                 ContentType = "application/json",
                 Persistent = true, // written to disk, so it survives a broker restart
             };
-            await channel.BasicPublishAsync(exchange, routingKey, mandatory: true, properties, Rabbit.Serialize(message), ct);
+            await channel.BasicPublishAsync(exchange, routingKey, mandatory: true, properties, body, ct);
         }
         finally
         {
@@ -44,6 +48,7 @@ public sealed class RabbitPublisher(IConfiguration config) : IAsyncDisposable
             new CreateChannelOptions(publisherConfirmationsEnabled: true, publisherConfirmationTrackingEnabled: true), ct);
         await Rabbit.DeclareFollowUpQueueAsync(_channel, ct);
         await Rabbit.DeclareTransferTopologyAsync(_channel, ct);
+        await Rabbit.DeclareAccountTopologyAsync(_channel, ct);
         return _channel;
     }
 

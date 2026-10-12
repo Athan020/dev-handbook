@@ -48,6 +48,12 @@ namespace Bank.Api.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("opened_at");
 
+                    b.Property<int>("Version")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("version");
+
                     b.HasKey("Id")
                         .HasName("pk_accounts");
 
@@ -65,14 +71,37 @@ namespace Bank.Api.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<string>("Exchange")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValue("transfers")
+                        .HasColumnName("exchange");
+
                     b.Property<string>("Payload")
                         .IsRequired()
                         .HasColumnType("jsonb")
                         .HasColumnName("payload");
 
+                    b.Property<long>("Position")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("position");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Position"));
+
                     b.Property<DateTimeOffset?>("PublishedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("published_at");
+
+                    b.Property<string>("RoutingKey")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValue("transfer.completed")
+                        .HasColumnName("routing_key");
 
                     b.Property<string>("Type")
                         .IsRequired()
@@ -85,6 +114,10 @@ namespace Bank.Api.Data.Migrations
 
                     b.HasIndex("CreatedAt")
                         .HasDatabaseName("ix_outbox_messages_created_at")
+                        .HasFilter("published_at IS NULL");
+
+                    b.HasIndex("Position")
+                        .HasDatabaseName("ix_outbox_messages_position")
                         .HasFilter("published_at IS NULL");
 
                     b.ToTable("outbox_messages", (string)null);
@@ -141,6 +174,60 @@ namespace Bank.Api.Data.Migrations
                         .HasName("pk_reward_points");
 
                     b.ToTable("reward_points", (string)null);
+                });
+
+            modelBuilder.Entity("Bank.Api.Data.StatementAccount", b =>
+                {
+                    b.Property<int>("AccountId")
+                        .HasColumnType("integer")
+                        .HasColumnName("account_id");
+
+                    b.Property<decimal>("Balance")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("balance");
+
+                    b.Property<int>("LastSequence")
+                        .HasColumnType("integer")
+                        .HasColumnName("last_sequence");
+
+                    b.HasKey("AccountId")
+                        .HasName("pk_statement_accounts");
+
+                    b.ToTable("statement_accounts", (string)null);
+                });
+
+            modelBuilder.Entity("Bank.Api.Data.StatementProblem", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("AccountId")
+                        .HasColumnType("integer")
+                        .HasColumnName("account_id");
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("at");
+
+                    b.Property<string>("Problem")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("problem");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer")
+                        .HasColumnName("sequence");
+
+                    b.HasKey("Id")
+                        .HasName("pk_statement_problems");
+
+                    b.ToTable("statement_problems", (string)null);
                 });
 
             modelBuilder.Entity("Bank.Api.Data.Transaction", b =>

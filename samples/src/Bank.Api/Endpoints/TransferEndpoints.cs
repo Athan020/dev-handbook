@@ -9,6 +9,8 @@ namespace Bank.Api.Endpoints;
 
 public sealed record TransferRequest(int FromAccountId, int ToAccountId, decimal Amount, string Reference);
 
+public sealed record OpenAccountRequest(string HolderName);
+
 /// <summary>
 /// Journey B2. A transfer moves money between two accounts, then follow-up work happens:
 /// an email to the customer and a fraud score. Lab:Transfers chooses where that follow-up
@@ -28,6 +30,7 @@ public static class TransferEndpoints
     public static IEndpointRouteBuilder MapTransferEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapPost("/transfers", CreateTransfer);
+        app.MapPost("/accounts", OpenAccount);
         return app;
     }
 
@@ -105,6 +108,34 @@ public static class TransferEndpoints
     }
 
     /// <summary>
+    /// B2 stage 5: opens an account and saves an AccountOpened event in the outbox, in one
+    /// transaction. The relay publishes it when Lab:Transfers=Outbox.
+    /// </summary>
+    private static async Task<IResult> OpenAccount(OpenAccountRequest request, BankDb db, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.HolderName) || request.HolderName.Length > 200)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["holderName"] = ["holderName must be 1 to 200 characters."],
+            });
+        }
+
+        var account = new Account { HolderName = request.HolderName, Currency = "ZAR", OpenedAt = DateTimeOffset.UtcNow, Version = 1 };
+        db.Accounts.Add(account);
+        await db.SaveChangesAsync(ct); // assigns the id
+
+        db.OutboxMessages.Add(Outbox.Message(
+            Rabbit.AccountsExchange, Rabbit.AccountRoutingKey(account.Id, "opened"), Guid.CreateVersion7(),
+            new AccountOpened(account.Id, account.HolderName, 1, account.OpenedAt)));
+        await db.SaveChangesAsync(ct);
+        // (Two saves, so a crash between them could lose the event. The lab keeps it simple;
+        // in a real service, wrap both in one transaction, as the transfer below does.)
+
+        return Results.Created($"/accounts/{account.Id}", new AccountResponse(account.Id, account.HolderName, account.Currency, account.OpenedAt));
+    }
+
+    /// <summary>
     /// Records the debit and the credit in one database transaction (SaveChanges is atomic).
     /// Deliberately simple: no balance check, no idempotency key, no concurrency control.
     /// Journey B3 covers moving money safely.
@@ -112,6 +143,7 @@ public static class TransferEndpoints
     private static async Task<TransferCompleted> RecordTransferAsync(
         BankDb db, TransferRequest request, bool outbox, CancellationToken ct)
     {
+        await using var dbTransaction = await db.Database.BeginTransactionAsync(ct);
         var now = DateTimeOffset.UtcNow;
         var transfer = new TransferCompleted(
             Guid.CreateVersion7(), request.FromAccountId, request.ToAccountId, request.Amount, request.Reference, now);
@@ -132,17 +164,33 @@ public static class TransferEndpoints
         // or neither does. The relay publishes it later.
         if (outbox)
         {
-            db.OutboxMessages.Add(new OutboxMessage
-            {
-                Id = transfer.TransferId,
-                Type = nameof(TransferCompleted),
-                Payload = JsonSerializer.Serialize(transfer, JsonSerializerOptions.Web),
-                CreatedAt = now,
-            });
+            db.OutboxMessages.Add(Outbox.Message(
+                Rabbit.TransfersExchange, Rabbit.TransferCompletedKey, transfer.TransferId, transfer));
         }
         // #endregion outbox-write
 
+        if (outbox)
+        {
+            // #region account-sequence
+            // B2 stage 5: each account's events are numbered. Taking the next number locks the
+            // account's row until this transaction commits, so concurrent transfers can't share a
+            // number. Lock the lower id first, so two transfers between the same accounts in
+            // opposite directions can't deadlock.
+            foreach (var (accountId, amount) in new[] { (request.FromAccountId, -request.Amount), (request.ToAccountId, request.Amount) }
+                         .OrderBy(e => e.Item1))
+            {
+                var sequence = await db.Database
+                    .SqlQuery<int>($"UPDATE accounts SET version = version + 1 WHERE id = {accountId} RETURNING version AS \"Value\"")
+                    .ToListAsync(ct);
+                db.OutboxMessages.Add(Outbox.Message(
+                    Rabbit.AccountsExchange, Rabbit.AccountRoutingKey(accountId, "entry-posted"), Guid.CreateVersion7(),
+                    new AccountEntryPosted(accountId, transfer.TransferId, amount, sequence.Single(), now)));
+            }
+            // #endregion account-sequence
+        }
+
         await db.SaveChangesAsync(ct);
+        await dbTransaction.CommitAsync(ct);
         return transfer;
     }
 }

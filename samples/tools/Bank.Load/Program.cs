@@ -10,12 +10,37 @@
 // the way real traffic concentrates on a few popular keys.
 //
 // --transfers posts transfers between random accounts instead (journey B2).
+//
+// --ordering-burst N opens N accounts, and right after opening each one sends three transfers
+// involving it, in parallel: the tightly packed events that B2 stage 5 needs. Then it exits.
 using System.Diagnostics;
 using System.Globalization;
 using System.Net.Http.Json;
 
 var options = Options.Parse(args);
 using var http = new HttpClient { BaseAddress = new Uri(options.Url), Timeout = TimeSpan.FromSeconds(30) };
+
+if (Array.IndexOf(args, "--ordering-burst") is var burstAt and >= 0)
+{
+    var count = int.Parse(args[burstAt + 1], CultureInfo.InvariantCulture);
+    int? previous = null;
+    for (var i = 0; i < count; i++)
+    {
+        var opened = await http.PostAsJsonAsync("/accounts", new { holderName = $"Ordering burst {i}" });
+        var account = (await opened.Content.ReadFromJsonAsync<OpenedAccount>())!.Id;
+        if (previous is int other)
+        {
+            // A salary lands, and the customer immediately pays two people.
+            await Task.WhenAll(
+                http.PostAsJsonAsync("/transfers", new { fromAccountId = other, toAccountId = account, amount = 500m, reference = "Salary" }),
+                http.PostAsJsonAsync("/transfers", new { fromAccountId = account, toAccountId = other, amount = 20m, reference = "Airtime" }),
+                http.PostAsJsonAsync("/transfers", new { fromAccountId = account, toAccountId = other, amount = 35m, reference = "Groceries" }));
+        }
+        previous = account;
+    }
+    Console.WriteLine($"Opened {count} accounts, with three transfers each after the first.");
+    return;
+}
 
 Console.WriteLine($"{options.Concurrency} workers for {options.Seconds}s against {options.Url}{(options.Transfers ? "/transfers (POST)" : options.Path)}");
 
@@ -75,6 +100,8 @@ Console.WriteLine($"max       {all[^1],8:N1} ms");
 static double Percentile(double[] sorted, double p) =>
     sorted[Math.Clamp((int)Math.Ceiling(p * sorted.Length) - 1, 0, sorted.Length - 1)];
 // #endregion percentile
+
+sealed record OpenedAccount(int Id);
 
 sealed record Options(string Url, string Path, int Concurrency, int Seconds, int Accounts, double Hot, int HotAccounts, bool Transfers)
 {

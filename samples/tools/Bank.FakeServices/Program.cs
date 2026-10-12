@@ -21,12 +21,17 @@ var emailLagsMs = new ConcurrentQueue<double>(); // how long after the transfer 
 var idempotencyKeys = new ConcurrentDictionary<string, bool>();
 var duplicatesSuppressed = 0;
 var fraudChecks = 0;
+var failedCalls = 0; // calls answered with 503, to show how hard retries hit a struggling service
 
 app.MapPost("/email", async (EmailRequest email, HttpRequest http, ILogger<Program> log, CancellationToken ct) =>
 {
     var current = settings;
     await Task.Delay(current.EmailDelayMs, ct);
-    if (Random.Shared.NextDouble() < current.FailureRate) return Results.StatusCode(503);
+    if (Random.Shared.NextDouble() < current.FailureRate)
+    {
+        Interlocked.Increment(ref failedCalls);
+        return Results.StatusCode(503);
+    }
 
     // Like real email and payment APIs: a repeated Idempotency-Key gets the original result,
     // and no second email.
@@ -60,6 +65,7 @@ app.MapGet("/stats", () => new
     transfersEmailedMoreThanOnce = emailsPerTransfer.Count(e => e.Value > 1),
     fraudChecks,
     duplicatesSuppressed,
+    failedCalls,
     emailLagMs = Lags(emailLagsMs),
     settings,
 });
@@ -76,6 +82,7 @@ app.MapPost("/reset", () =>
     emailLagsMs.Clear();
     idempotencyKeys.Clear();
     duplicatesSuppressed = 0;
+    failedCalls = 0;
     fraudChecks = 0;
     return Results.Ok();
 });

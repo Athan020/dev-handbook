@@ -10,5 +10,14 @@ builder.Services.AddHttpClient<FollowUp>(http =>
     http.BaseAddress = new Uri(builder.Configuration["FakeServices:Url"] ?? "http://localhost:5090"));
 builder.Services.AddSingleton(_ => NpgsqlDataSource.Create(builder.Configuration.GetConnectionString("Bank")!));
 builder.Services.AddSingleton<Rewards>();
-builder.Services.AddHostedService<Consumer>();
+builder.Services.AddSingleton<Statements>();
+// The statements service has its own consumer (stage 5); every other role uses Consumer.
+if (builder.Configuration["Worker:Role"] == "statements")
+{
+    builder.Services.AddHostedService<StatementsConsumer>();
+}
+else
+{
+    builder.Services.AddHostedService<Consumer>();
+}
 builder.Build().Run();
