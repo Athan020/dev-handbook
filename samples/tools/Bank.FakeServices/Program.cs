@@ -15,7 +15,10 @@ var app = builder.Build();
 var settings = new FakeSettings(
     app.Configuration.GetValue("emailDelayMs", 300),
     app.Configuration.GetValue("fraudDelayMs", 500),
-    app.Configuration.GetValue("failureRate", 0.0));
+    app.Configuration.GetValue("failureRate", 0.0),
+    app.Configuration.GetValue("maxConcurrentEmails", 0));
+var emailsInFlight = 0;
+var rateLimited = 0; // calls refused with 429 because too many were already in flight
 var emailsPerTransfer = new ConcurrentDictionary<Guid, int>();
 var emailLagsMs = new ConcurrentQueue<double>(); // how long after the transfer each email went out
 var idempotencyKeys = new ConcurrentDictionary<string, bool>();
@@ -26,6 +29,25 @@ var failedCalls = 0; // calls answered with 503, to show how hard retries hit a 
 app.MapPost("/email", async (EmailRequest email, HttpRequest http, ILogger<Program> log, CancellationToken ct) =>
 {
     var current = settings;
+    // Like a real provider's rate limit: past a number of calls in flight, refuse with 429.
+    if (Interlocked.Increment(ref emailsInFlight) > current.MaxConcurrentEmails && current.MaxConcurrentEmails > 0)
+    {
+        Interlocked.Decrement(ref emailsInFlight);
+        Interlocked.Increment(ref rateLimited);
+        return Results.StatusCode(429);
+    }
+    try
+    {
+        return await SendEmailAsync(email, http, log, current, ct);
+    }
+    finally
+    {
+        Interlocked.Decrement(ref emailsInFlight);
+    }
+});
+
+async Task<IResult> SendEmailAsync(EmailRequest email, HttpRequest http, ILogger log, FakeSettings current, CancellationToken ct)
+{
     await Task.Delay(current.EmailDelayMs, ct);
     if (Random.Shared.NextDouble() < current.FailureRate)
     {
@@ -46,7 +68,7 @@ app.MapPost("/email", async (EmailRequest email, HttpRequest http, ILogger<Progr
     log.LogInformation("Email for transfer {TransferId} to {To}{Duplicate}", email.TransferId, email.To,
         count > 1 ? $" (copy {count}!)" : "");
     return Results.Ok();
-});
+}
 
 app.MapPost("/fraud-check", async (CancellationToken ct) =>
 {
@@ -66,6 +88,7 @@ app.MapGet("/stats", () => new
     fraudChecks,
     duplicatesSuppressed,
     failedCalls,
+    rateLimited,
     emailLagMs = Lags(emailLagsMs),
     settings,
 });
@@ -83,6 +106,7 @@ app.MapPost("/reset", () =>
     idempotencyKeys.Clear();
     duplicatesSuppressed = 0;
     failedCalls = 0;
+    rateLimited = 0;
     fraudChecks = 0;
     return Results.Ok();
 });
@@ -96,5 +120,5 @@ static object Lags(IEnumerable<double> values)
     return new { p50 = At(0.5), p99 = At(0.99), max = sorted.Length == 0 ? 0 : Math.Round(sorted[^1]) };
 }
 
-sealed record FakeSettings(int EmailDelayMs, int FraudDelayMs, double FailureRate);
+sealed record FakeSettings(int EmailDelayMs, int FraudDelayMs, double FailureRate, int MaxConcurrentEmails = 0);
 sealed record EmailRequest(Guid TransferId, string To, string Subject, DateTimeOffset? CompletedAt);

@@ -13,6 +13,9 @@
 //
 // --ordering-burst N opens N accounts, and right after opening each one sends three transfers
 // involving it, in parallel: the tightly packed events that B2 stage 5 needs. Then it exits.
+//
+// --payroll N posts exactly N salary transfers, --concurrency at a time, as fast as the API
+// accepts them: the burst that B2 stage 7 needs. Then it exits.
 using System.Diagnostics;
 using System.Globalization;
 using System.Net.Http.Json;
@@ -39,6 +42,28 @@ if (Array.IndexOf(args, "--ordering-burst") is var burstAt and >= 0)
         previous = account;
     }
     Console.WriteLine($"Opened {count} accounts, with three transfers each after the first.");
+    return;
+}
+
+if (Array.IndexOf(args, "--payroll") is var payrollAt and >= 0)
+{
+    var count = int.Parse(args[payrollAt + 1], CultureInfo.InvariantCulture);
+    var next = 0;
+    var accepted = 0;
+    var timer = Stopwatch.StartNew();
+    await Task.WhenAll(Enumerable.Range(0, options.Concurrency).Select(async _ =>
+    {
+        while (Interlocked.Increment(ref next) is var i && i <= count)
+        {
+            var transfer = new { fromAccountId = 22 + i % 50, toAccountId = 80 + i % 50, amount = 1000m, reference = "Payroll" };
+            using var response = await http.PostAsJsonAsync("/transfers", transfer);
+            if (response.IsSuccessStatusCode)
+            {
+                Interlocked.Increment(ref accepted);
+            }
+        }
+    }));
+    Console.WriteLine($"Posted {count} salary transfers in {timer.Elapsed.TotalSeconds:F0}s; {accepted} accepted.");
     return;
 }
 

@@ -1,5 +1,6 @@
 import DefaultTheme from 'vitepress/theme'
 import type { Theme } from 'vitepress'
+import BacklogSimulator from './components/BacklogSimulator.vue'
 import CacheSimulator from './components/CacheSimulator.vue'
 import DeliverySimulator from './components/DeliverySimulator.vue'
 import HashRingSimulator from './components/HashRingSimulator.vue'
@@ -23,5 +24,6 @@ export default {
     app.component('HashRingSimulator', HashRingSimulator)
     app.component('DeliverySimulator', DeliverySimulator)
     app.component('OutboxSimulator', OutboxSimulator)
+    app.component('BacklogSimulator', BacklogSimulator)
   },
 } satisfies Theme

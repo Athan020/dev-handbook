@@ -56,11 +56,12 @@ dotnet run --project src/Bank.Worker           # does follow-up work taken off R
 
 `--Lab:Transfers=Inline|Background|Queue|Event|Outbox` on the API chooses where a transfer's follow-up work runs, and how its event is published (default `Inline`). `--Lab:CrashAfterCommit=0.1` and `--Lab:RelayCrashChance=0.2` make the API die at the worst moments, for stage 4.
 
-`--Worker:Role=follow-up|email|fraud|rewards|history|statements|replay` chooses what a worker does. `--Worker:Idempotent=true` makes the email and rewards workers safe against duplicates, and `--Worker:CrashChance=0.1` makes a worker die after the work but before acknowledging it, for stage 3. For stage 5, `POST /accounts` opens an account, `--Worker:Topology=Shared|Partitioned` chooses how the statements worker reads account events, and `dotnet run --project tools/Bank.Load -- --ordering-burst 150` creates tightly packed events. For stage 6, `--Worker:Retries=Requeue|Backoff` chooses what happens to failed messages, and `--Worker:Role=replay --Worker:Queue=<queue>` moves a queue's dead letters back. After pulling new code, run `dotnet run --project src/Bank.Api -- seed` once: it applies any new database migrations, then stops when it sees existing data. Make the fake services slow or unreliable while they run, and see what they've done:
+`--Worker:Role=follow-up|email|fraud|rewards|history|statements|replay` chooses what a worker does. `--Worker:Idempotent=true` makes the email and rewards workers safe against duplicates, and `--Worker:CrashChance=0.1` makes a worker die after the work but before acknowledging it, for stage 3. For stage 5, `POST /accounts` opens an account, `--Worker:Topology=Shared|Partitioned` chooses how the statements worker reads account events, and `dotnet run --project tools/Bank.Load -- --ordering-burst 150` creates tightly packed events. For stage 6, `--Worker:Retries=Requeue|Backoff` chooses what happens to failed messages, and `--Worker:Role=replay --Worker:Queue=<queue>` moves a queue's dead letters back. For stage 7, `--Worker:Concurrency` and `--Worker:Prefetch` set how many messages a worker handles at once, `"maxConcurrentEmails": 20` in the fake services' settings makes the email provider refuse (429) calls beyond 20 at a time, and `dotnet run --project tools/Bank.Load -- --payroll 6000 --concurrency 32` sends a burst of salary transfers. After pulling new code, run `dotnet run --project src/Bank.Api -- seed` once: it applies any new database migrations, then stops when it sees existing data. Make the fake services slow or unreliable while they run, and see what they've done:
 
 ```sh
 curl -X POST localhost:5090/settings -H "Content-Type: application/json" -d '{"emailDelayMs": 300, "fraudDelayMs": 500, "failureRate": 0.2}'
-curl localhost:5090/stats
+curl localhost:5090/stats   # emails sent, duplicates suppressed, failed and refused (rateLimited) calls, email lag
+curl -X POST localhost:5090/reset
 ```
 
 ## Lab tools

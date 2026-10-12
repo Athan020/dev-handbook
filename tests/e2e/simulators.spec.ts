@@ -179,3 +179,44 @@ test.describe('outbox simulator', () => {
     expect(await cell(sim, 'outboxIdempotent', 'correct')).toBe(1000)
   })
 })
+
+test.describe('backlog simulator', () => {
+  const url = '/backend/journeys/work-outside-the-request/07-backpressure'
+  const stat = async (sim: Locator, key: string) => (await sim.locator(`[data-stat="${key}"]`).innerText()).trim()
+  const peak = async (sim: Locator) => Number((await stat(sim, 'peak')).replace(/\D/g, ''))
+
+  async function preset(page: Page, label: string) {
+    await page.goto(url)
+    const sim = page.locator('.simulator').first()
+    await sim.getByRole('button', { name: label, exact: true }).click()
+    return sim
+  }
+
+  test('an ordinary day keeps up', async ({ page }) => {
+    expect(await peak(await preset(page, 'An ordinary day'))).toBeLessThan(10)
+  })
+
+  test('payroll builds a backlog that more capacity shrinks, up to the provider limit', async ({ page }) => {
+    const one = await peak(await preset(page, 'Payroll, one worker'))
+    const atLimit = await peak(await preset(page, 'Payroll, at the provider limit'))
+    const beyond = await peak(await preset(page, 'More workers than the provider allows'))
+    expect(one).toBeGreaterThan(10_000)
+    expect(atLimit).toBeLessThan(one)
+    expect(beyond).toBe(atLimit) // the provider caps throughput
+  })
+
+  test('a bounded queue rejects work instead of growing past its limit', async ({ page }) => {
+    const sim = await preset(page, 'Bounded queue')
+    expect(await peak(sim)).toBeLessThanOrEqual(10_000)
+    expect(Number((await stat(sim, 'rejected')).replace(/\D/g, ''))).toBeGreaterThan(0)
+  })
+
+  test('hovering the chart reports the depth and wait at that moment', async ({ page }) => {
+    const sim = await preset(page, 'Payroll, one worker')
+    const chart = sim.locator('.chart svg')
+    await chart.scrollIntoViewIfNeeded()
+    const box = (await chart.boundingBox())!
+    await page.mouse.move(box.x + box.width * 0.45, box.y + box.height / 2)
+    await expect(sim.locator('.tooltip')).toContainText(/waiting; the email sent now waited/)
+  })
+})
