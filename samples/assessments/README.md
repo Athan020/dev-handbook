@@ -1,6 +1,17 @@
 # Assessment practice sets
 
-Timed practice for online assessments, with the problem statements on the handbook's [practice page](../../docs/interviews/assessments/practice/index.md). Each set is a test project:
+Timed practice for online assessments, with the problem statements on the handbook's [practice page](../../docs/interviews/assessments/practice/index.md).
+
+| Set | Time | Folder |
+|---|---|---|
+| 1. Warm-up | 60 min | `Set1.Warmup` |
+| 2. Large inputs | 75 min | `Set2.LargeInputs` |
+| 3. SQL (needs Docker) | 45 min | `Set3.Sql` |
+| 4. Project task | 60 min | `Set4.Project`, with the task in its README |
+
+`Toolkit/` holds the tested snippets from the handbook's C# toolkit page; it isn't a practice set.
+
+Each set is a test project:
 
 - `Problems/` holds your starting points. Write your answers here.
 - `Reference/` holds worked solutions. Don't open it until you've finished the set.

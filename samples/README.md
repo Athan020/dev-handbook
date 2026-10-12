@@ -85,3 +85,7 @@ dotnet test --solution Samples.sln
 ```
 
 The integration tests start their own throwaway Postgres in Docker, so Docker must be running. They don't touch the lab database.
+
+## Assessment practice
+
+`assessments/` is a separate solution of timed practice sets for online assessments, plus the tested snippets from the C# toolkit page. See [assessments/README.md](assessments/README.md).

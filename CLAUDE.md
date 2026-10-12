@@ -15,6 +15,7 @@ A VitePress site for building T-shaped software engineering skills, organised by
 - `dotnet run --project samples/src/Bank.Api -- seed`: create the schema and seed 10M transactions (one to three minutes; `docker compose down -v` to start over)
 - `dotnet build samples/Samples.sln` and `dotnet test --solution samples/Samples.sln`: compile and test the samples (the tests need Docker running)
 - `dotnet run --project samples/src/Bank.Api -- schema`: regenerate `Data/Seed/schema.sql` (the SQL playground's schema) after changing the model; a test fails if it's stale
+- `dotnet test --solution samples/assessments/Assessments.sln -p:UseReference=true`: test the assessment practice sets' worked solutions (without the flag, the tests run against the empty starting points in `Problems/` and fail, as they should). The SQL set needs Docker.
 
 ## Layout
 

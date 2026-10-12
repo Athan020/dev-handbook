@@ -1,0 +1,2 @@
+-- Question 3. See the practice set page for the full statement.
+-- Write your query below.
