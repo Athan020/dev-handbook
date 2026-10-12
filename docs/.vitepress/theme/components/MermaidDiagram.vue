@@ -1,3 +1,9 @@
+<script lang="ts">
+// Shared by every diagram on the page. Mermaid scopes each diagram's styles by its element
+// id, so ids must be unique across instances, not per instance.
+let nextId = 0
+</script>
+
 <script setup lang="ts">
 // Renders one ```mermaid block. The markdown fence is turned into
 // <MermaidDiagram code="..."> in config.mts; the code arrives URI-encoded.
@@ -13,7 +19,6 @@ const { isDark } = useData()
 const svg = ref('')
 const error = ref('')
 
-let nextId = 0
 // mermaid.render uses shared global state, so diagrams render one at a time.
 let queue: Promise<unknown> = Promise.resolve()
 
@@ -47,7 +52,7 @@ watch(isDark, render)
     <div v-if="svg" v-html="svg" />
     <div v-else-if="error" class="mermaid-error" role="alert">
       <p><strong>This diagram failed to render.</strong></p>
-      <pre>{{ error }}</pre>
+      <pre>{{`` error }}</pre>
     </div>
   </div>
 </template>

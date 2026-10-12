@@ -58,6 +58,9 @@ for (const { url, file, diagrams } of diagramPages) {
       await expect(page.locator('.mermaid > div')).toHaveCount(diagrams, { timeout: 15_000 })
       expect(await page.locator('.mermaid-error').allInnerTexts(), 'diagrams that failed to render').toEqual([])
       await expect(diagram(page)).toHaveCount(diagrams)
+      // Mermaid scopes each diagram's styles by its id, so two diagrams sharing one break each other.
+      const ids = await diagram(page).evaluateAll((svgs) => svgs.map((svg) => svg.id))
+      expect(new Set(ids).size, `diagram ids on the page: ${ids.join(', ')}`).toBe(ids.length)
       const lightStyles: string[] = []
       for (let i = 0; i < diagrams; i++) {
         const svg = diagram(page).nth(i)
