@@ -2,7 +2,7 @@
 title: "B3: The money must add up"
 track: backend
 journey: the-money-must-add-up
-status: draft
+status: written
 ---
 
 # B3: The money must add up
