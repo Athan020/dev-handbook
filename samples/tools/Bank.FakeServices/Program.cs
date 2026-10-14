@@ -13,6 +13,9 @@
 //
 //   curl -X POST localhost:5090/network/settings -H "Content-Type: application/json" \
 //        -d '{"lostReplyRate": 0.1, "failureRate": 0.05, "deduplicates": true}'
+//
+// GET /network/payments is its settlement record: every payment it made, which stage 7
+// reconciles. amountErrorRate and missingFromRecordsRate add the network's own mistakes.
 using System.Collections.Concurrent;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -137,9 +140,15 @@ app.MapPost("/network/payments", async (NetworkPaymentRequest request) =>
     {
         return Results.Ok(existing);
     }
-    var payment = new NetworkPayment(request.Reference, request.Amount, request.ToBank, request.ToAccount, DateTimeOffset.UtcNow);
+    // B3 stage 7: the network's own mistakes. Sometimes it pays a different amount from the one
+    // instructed, and sometimes a settlement never makes it into its records.
+    var amount = Random.Shared.NextDouble() < current.AmountErrorRate ? request.Amount + 1.00m : request.Amount;
+    var payment = new NetworkPayment(request.Reference, amount, request.ToBank, request.ToAccount, DateTimeOffset.UtcNow);
     settled[request.Reference] = payment;
-    settlements.Enqueue(payment);
+    if (Random.Shared.NextDouble() >= current.MissingFromRecordsRate)
+    {
+        settlements.Enqueue(payment);
+    }
 
     if (Random.Shared.NextDouble() < current.LostReplyRate)
     {
@@ -183,6 +192,8 @@ static object Lags(IEnumerable<double> values)
 sealed record FakeSettings(int EmailDelayMs, int FraudDelayMs, double FailureRate, int MaxConcurrentEmails = 0);
 sealed record EmailRequest(Guid TransferId, string To, string Subject, DateTimeOffset? CompletedAt);
 
-sealed record NetworkSettings(int DelayMs = 50, double FailureRate = 0, double LostReplyRate = 0, int LateReplyMs = 3000, bool Deduplicates = true);
+sealed record NetworkSettings(
+    int DelayMs = 50, double FailureRate = 0, double LostReplyRate = 0, int LateReplyMs = 3000, bool Deduplicates = true,
+    double AmountErrorRate = 0, double MissingFromRecordsRate = 0);
 sealed record NetworkPaymentRequest(string Reference, decimal Amount, string ToBank, string ToAccount);
 sealed record NetworkPayment(string Reference, decimal Amount, string ToBank, string ToAccount, DateTimeOffset SettledAt);

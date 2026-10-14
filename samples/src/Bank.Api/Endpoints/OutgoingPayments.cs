@@ -161,6 +161,8 @@ public static class OutgoingPayments
     private static OutgoingPaymentResponse Response(OutgoingPayment p, string? status = null) => new(p.Id, status ?? p.Status, p.Amount);
 }
 
+public sealed record NetworkSettlement(string Reference, decimal Amount, DateTimeOffset SettledAt);
+
 public enum NetworkOutcome
 {
     Settled,
@@ -191,6 +193,10 @@ public sealed class NetworkClient(HttpClient http)
         }
     }
     // #endregion network-call
+
+    /// <summary>The network's settlement record: every payment it says it made.</summary>
+    public async Task<List<NetworkSettlement>> SettlementsAsync(CancellationToken ct) =>
+        await http.GetFromJsonAsync<List<NetworkSettlement>>("/network/payments", ct) ?? [];
 
     public async Task<NetworkOutcome> StatusAsync(Guid reference, CancellationToken ct)
     {

@@ -81,6 +81,7 @@ app.MapAccountEndpoints();
 app.MapSummaryEndpoints();
 app.MapTransferEndpoints();
 app.MapOutgoingPaymentEndpoints();
+app.MapReconciliationEndpoints();
 
 app.Run();
 

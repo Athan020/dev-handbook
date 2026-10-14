@@ -213,6 +213,7 @@ if (Array.IndexOf(args, "--outgoing") is var outgoingAt and >= 0)
 
     const decimal deposit = 1_000_000m;
     var payer = await OpenFundedAsync("Pays other banks", deposit);
+    Console.WriteLine($"Paying from account {payer}.");
     var result = await BurstToAsync(count, "/outgoing-payments", i => new
     {
         fromAccountId = payer, amount = 10m, toBank = "Other Bank", toAccount = $"ACC{i:D6}",
