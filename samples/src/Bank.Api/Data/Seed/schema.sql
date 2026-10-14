@@ -34,6 +34,20 @@ CREATE TABLE outbox_messages (
 );
 
 
+CREATE TABLE outgoing_payments (
+    id uuid NOT NULL,
+    from_account_id integer NOT NULL,
+    amount numeric(18,2) NOT NULL,
+    to_bank character varying(50) NOT NULL,
+    to_account character varying(50) NOT NULL,
+    status character varying(20) NOT NULL,
+    attempts integer NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    resolved_at timestamp with time zone,
+    CONSTRAINT pk_outgoing_payments PRIMARY KEY (id)
+);
+
+
 CREATE TABLE processed_messages (
     consumer character varying(100) NOT NULL,
     message_id character varying(100) NOT NULL,
@@ -90,5 +104,8 @@ CREATE INDEX ix_outbox_messages_created_at ON outbox_messages (created_at) WHERE
 
 
 CREATE INDEX ix_outbox_messages_position ON outbox_messages (position) WHERE published_at IS NULL;
+
+
+CREATE INDEX ix_outgoing_payments_created_at ON outgoing_payments (created_at) WHERE status = 'Pending';
 
 

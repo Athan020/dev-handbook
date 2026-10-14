@@ -11,6 +11,7 @@ public sealed class BankDb(DbContextOptions<BankDb> options) : DbContext(options
     public DbSet<ProcessedMessage> ProcessedMessages => Set<ProcessedMessage>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
     public DbSet<IdempotencyKey> IdempotencyKeys => Set<IdempotencyKey>();
+    public DbSet<OutgoingPayment> OutgoingPayments => Set<OutgoingPayment>();
     public DbSet<StatementAccount> StatementAccounts => Set<StatementAccount>();
     public DbSet<StatementProblem> StatementProblems => Set<StatementProblem>();
 
@@ -65,6 +66,18 @@ public sealed class BankDb(DbContextOptions<BankDb> options) : DbContext(options
             key.Property(k => k.Response).HasColumnType("jsonb");
             // Old keys are deleted in batches by age.
             key.HasIndex(k => k.CreatedAt);
+        });
+
+        // Journey B3 stage 6.
+        model.Entity<OutgoingPayment>(payment =>
+        {
+            payment.ToTable("outgoing_payments");
+            payment.Property(p => p.Amount).HasPrecision(18, 2);
+            payment.Property(p => p.ToBank).HasMaxLength(50);
+            payment.Property(p => p.ToAccount).HasMaxLength(50);
+            payment.Property(p => p.Status).HasMaxLength(20);
+            // The resolver looks for payments still pending, oldest first.
+            payment.HasIndex(p => p.CreatedAt).HasFilter("status = 'Pending'");
         });
 
         model.Entity<OutboxMessage>(outbox =>

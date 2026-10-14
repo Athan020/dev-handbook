@@ -6,6 +6,13 @@
 //        -d '{"emailDelayMs": 300, "fraudDelayMs": 500, "failureRate": 0.2}'
 //
 // GET /stats counts emails per transfer, so duplicates show up.
+//
+// Journey B3 adds a payment network under /network: payments to other banks. It settles each
+// payment it accepts, and can fail before doing anything, or settle and then answer too late
+// for the caller to wait (a lost reply). Change its behaviour while it runs:
+//
+//   curl -X POST localhost:5090/network/settings -H "Content-Type: application/json" \
+//        -d '{"lostReplyRate": 0.1, "failureRate": 0.05, "deduplicates": true}'
 using System.Collections.Concurrent;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -111,6 +118,59 @@ app.MapPost("/reset", () =>
     return Results.Ok();
 });
 
+// #region network
+var network = new NetworkSettings();
+var settled = new ConcurrentDictionary<string, NetworkPayment>(); // by the sender's reference
+var settlements = new ConcurrentQueue<NetworkPayment>();         // every settlement, duplicates included
+
+app.MapPost("/network/payments", async (NetworkPaymentRequest request) =>
+{
+    var current = network;
+    await Task.Delay(current.DelayMs);
+    if (Random.Shared.NextDouble() < current.FailureRate)
+    {
+        return Results.StatusCode(503); // failed before doing anything
+    }
+
+    // A real network identifies a payment by the sender's reference, and won't pay it twice.
+    if (current.Deduplicates && settled.TryGetValue(request.Reference, out var existing))
+    {
+        return Results.Ok(existing);
+    }
+    var payment = new NetworkPayment(request.Reference, request.Amount, request.ToBank, request.ToAccount, DateTimeOffset.UtcNow);
+    settled[request.Reference] = payment;
+    settlements.Enqueue(payment);
+
+    if (Random.Shared.NextDouble() < current.LostReplyRate)
+    {
+        await Task.Delay(current.LateReplyMs); // settled, but the answer arrives after the caller gave up
+    }
+    return Results.Ok(payment);
+});
+
+app.MapGet("/network/payments/{reference}", (string reference) =>
+    settled.TryGetValue(reference, out var payment) ? Results.Ok(payment) : Results.NotFound());
+
+app.MapGet("/network/payments", () => settlements.OrderBy(p => p.SettledAt));
+
+app.MapGet("/network/stats", () => new
+{
+    settlements = settlements.Count,
+    distinctReferences = settled.Count,
+    amountSettled = settlements.Sum(p => p.Amount),
+    settings = network,
+});
+
+app.MapPost("/network/settings", (NetworkSettings next) => network = next);
+
+app.MapPost("/network/reset", () =>
+{
+    settled.Clear();
+    settlements.Clear();
+    return Results.Ok();
+});
+// #endregion network
+
 app.Run();
 
 static object Lags(IEnumerable<double> values)
@@ -122,3 +182,7 @@ static object Lags(IEnumerable<double> values)
 
 sealed record FakeSettings(int EmailDelayMs, int FraudDelayMs, double FailureRate, int MaxConcurrentEmails = 0);
 sealed record EmailRequest(Guid TransferId, string To, string Subject, DateTimeOffset? CompletedAt);
+
+sealed record NetworkSettings(int DelayMs = 50, double FailureRate = 0, double LostReplyRate = 0, int LateReplyMs = 3000, bool Deduplicates = true);
+sealed record NetworkPaymentRequest(string Reference, decimal Amount, string ToBank, string ToAccount);
+sealed record NetworkPayment(string Reference, decimal Amount, string ToBank, string ToAccount, DateTimeOffset SettledAt);

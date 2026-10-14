@@ -20,6 +20,8 @@
 //
 // --crossfire N sends N transfers between two new accounts, alternating direction (B3 stage 2).
 //
+// --outgoing N sends N payments to another bank and compares the two sides (B3 stage 6).
+//
 // --race N runs rounds of a race (B3 stage 1): open an account, deposit --deposit (default 100),
 // then send N transfers of --amount (default 60) from it, all at once. It reports how the API
 // answered, and in how many of --rounds rounds (default 50) the account ended up overdrawn.
@@ -199,6 +201,42 @@ if (Array.IndexOf(args, "--double-pay") is var doubleAt and >= 0)
     return;
 }
 
+// --outgoing N (B3 stage 6): N payments of 10.00 to another bank, from one new account. Then it
+// waits for the API to resolve any still pending, and compares what left the customer's account
+// with what the payment network says it paid. --network is the fake network's address.
+if (Array.IndexOf(args, "--outgoing") is var outgoingAt and >= 0)
+{
+    var count = int.Parse(args[outgoingAt + 1], CultureInfo.InvariantCulture);
+    var networkUrl = Array.IndexOf(args, "--network") is var n and >= 0 ? args[n + 1] : "http://localhost:5090";
+    using var networkHttp = new HttpClient { BaseAddress = new Uri(networkUrl) };
+    (await networkHttp.PostAsync("/network/reset", null)).EnsureSuccessStatusCode();
+
+    const decimal deposit = 1_000_000m;
+    var payer = await OpenFundedAsync("Pays other banks", deposit);
+    var result = await BurstToAsync(count, "/outgoing-payments", i => new
+    {
+        fromAccountId = payer, amount = 10m, toBank = "Other Bank", toAccount = $"ACC{i:D6}",
+    });
+    Console.WriteLine($"Sent {count} payments of 10.00 in {result.Seconds:F1}s: {result}");
+
+    // Wait for payments the API couldn't confirm straight away.
+    for (var waited = 0; waited < 60; waited++)
+    {
+        var summary = await http.GetFromJsonAsync<List<StatusCount>>($"/outgoing-payments/summary?fromAccountId={payer}");
+        if (summary is null || !summary.Any(s => s.Status == "Pending")) break;
+        await Task.Delay(1000);
+    }
+
+    var network = (await networkHttp.GetFromJsonAsync<NetworkStats>("/network/stats"))!;
+    var balance = (await http.GetFromJsonAsync<Summary>($"/accounts/{payer}/summary"))!.Balance;
+    var debited = deposit - balance;
+    var statuses = await http.GetFromJsonAsync<List<StatusCount>>($"/outgoing-payments/summary?fromAccountId={payer}");
+    Console.WriteLine($"Recorded by the API: {string.Join(", ", (statuses ?? []).Select(s => $"{s.Status} x {s.Count}"))}");
+    Console.WriteLine($"Taken from the customer: {debited:F2}. Paid by the network: {network.AmountSettled:F2} ({network.Settlements} settlements, {network.DistinctReferences} distinct references).");
+    Console.WriteLine($"Difference: {network.AmountSettled - debited:F2} paid out that the customer wasn't charged for.");
+    return;
+}
+
 // --crossfire N (B3 stage 2): two accounts paying each other, A to B and B to A, N transfers in all.
 if (Array.IndexOf(args, "--crossfire") is var crossAt and >= 0)
 {
@@ -224,7 +262,9 @@ async Task<int> OpenFundedAsync(string name, decimal deposit)
 }
 
 // Sends `count` transfers, --concurrency at a time, and reports the responses and latencies.
-async Task<BurstResult> BurstAsync(int count, Func<int, object> transfer)
+async Task<BurstResult> BurstAsync(int count, Func<int, object> transfer) => await BurstToAsync(count, "/transfers", transfer);
+
+async Task<BurstResult> BurstToAsync(int count, string path, Func<int, object> transfer)
 {
     var next = 0;
     var statuses = new System.Collections.Concurrent.ConcurrentDictionary<int, int>();
@@ -238,7 +278,7 @@ async Task<BurstResult> BurstAsync(int count, Func<int, object> transfer)
             int status;
             try
             {
-                using var response = await http.PostAsJsonAsync("/transfers", transfer(i));
+                using var response = await http.PostAsJsonAsync(path, transfer(i));
                 status = (int)response.StatusCode;
             }
             catch (TaskCanceledException)
@@ -317,6 +357,10 @@ static double Percentile(double[] sorted, double p) =>
 sealed record OpenedAccount(int Id);
 
 sealed record Summary(decimal Balance);
+
+sealed record StatusCount(string Status, int Count, decimal Amount);
+
+sealed record NetworkStats(int Settlements, int DistinctReferences, decimal AmountSettled);
 
 sealed record BurstResult(double Seconds, double PerSecond, string Statuses, double P50, double P99, double Max)
 {

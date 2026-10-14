@@ -174,6 +174,62 @@ namespace Bank.Api.Data.Migrations
                     b.ToTable("outbox_messages", (string)null);
                 });
 
+            modelBuilder.Entity("Bank.Api.Data.OutgoingPayment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("FromAccountId")
+                        .HasColumnType("integer")
+                        .HasColumnName("from_account_id");
+
+                    b.Property<DateTimeOffset?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resolved_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("ToAccount")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("to_account");
+
+                    b.Property<string>("ToBank")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("to_bank");
+
+                    b.HasKey("Id")
+                        .HasName("pk_outgoing_payments");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_outgoing_payments_created_at")
+                        .HasFilter("status = 'Pending'");
+
+                    b.ToTable("outgoing_payments", (string)null);
+                });
+
             modelBuilder.Entity("Bank.Api.Data.ProcessedMessage", b =>
                 {
                     b.Property<string>("Consumer")

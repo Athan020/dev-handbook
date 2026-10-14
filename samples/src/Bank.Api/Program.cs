@@ -23,6 +23,14 @@ builder.Services.AddHttpClient<FollowUp>(http =>
 builder.Services.AddSingleton<BackgroundFollowUpQueue>();
 builder.Services.AddHostedService<BackgroundFollowUpService>();
 builder.Services.AddSingleton<RabbitPublisher>();
+
+// Journey B3 stage 6: the payment network, and the resolver for payments with unknown outcomes.
+builder.Services.AddHttpClient<NetworkClient>(http =>
+{
+    http.BaseAddress = new Uri(builder.Configuration["FakeServices:Url"] ?? "http://localhost:5090");
+    http.Timeout = TimeSpan.FromMilliseconds(builder.Configuration.GetValue("Network:TimeoutMs", 1000));
+});
+builder.Services.AddHostedService<PendingPaymentResolver>();
 builder.Services.AddHostedService<OutboxRelay>();
 builder.Services.AddProblemDetails();
 builder.Services.AddMemoryCache();
@@ -72,6 +80,7 @@ app.MapGet("/health", () => Results.Ok("healthy"));
 app.MapAccountEndpoints();
 app.MapSummaryEndpoints();
 app.MapTransferEndpoints();
+app.MapOutgoingPaymentEndpoints();
 
 app.Run();
 
