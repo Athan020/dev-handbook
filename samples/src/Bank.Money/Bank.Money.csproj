@@ -1,0 +1,3 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- B3 stage 4: a money type that can't lose or invent cents. -->
+</Project>

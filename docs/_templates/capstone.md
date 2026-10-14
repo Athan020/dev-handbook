@@ -33,7 +33,7 @@ Try answering out loud before reading on. Give yourself the time a real intervie
 
 ## 3. Design
 
-<!-- The simplest design that meets the numbers, then what you'd add as they grow.
+<!-- The simplest design that meets the numbers, then what you'd add as they grow.  
      Link each decision to its stage, e.g. "(see [stage 2](./02-indexes-and-query-shape))". -->
 
 ## 4. Deep dive
