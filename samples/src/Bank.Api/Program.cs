@@ -1,3 +1,4 @@
+using Polly;
 using Bank.Api.Data;
 using Bank.Api.Endpoints;
 using Bank.Messaging;
@@ -34,6 +35,31 @@ builder.Services.AddHostedService<PendingPaymentResolver>();
 
 // Journey B4: the fraud gate on transfers, and an optional deadline for every request.
 builder.Services.AddFraudGate(builder.Configuration);
+
+// #region shared-pool
+// B4 stage 4: Lab:SharedOutboundPool sends email and fraud calls through one connection pool
+// with a fixed number of connections, as a shared client or an egress gateway would. Slow
+// emails can then hold every connection while fraud checks wait for one.
+var sharedPool = builder.Configuration.GetValue("Lab:SharedOutboundPool", 0);
+if (sharedPool > 0)
+{
+    var shared = new SocketsHttpHandler { MaxConnectionsPerServer = sharedPool };
+    builder.Services.AddHttpClient<FollowUp>().ConfigurePrimaryHttpMessageHandler(() => shared).SetHandlerLifetime(Timeout.InfiniteTimeSpan);
+    builder.Services.AddHttpClient<FraudClient>().ConfigurePrimaryHttpMessageHandler(() => shared).SetHandlerLifetime(Timeout.InfiniteTimeSpan);
+}
+// #endregion shared-pool
+
+// #region follow-up-bulkhead
+// B4 stage 4: a bulkhead for the background follow-up work. At most Lab:FollowUpMaxConcurrent
+// email and scoring calls at once; the rest wait their turn, and can't take the connections
+// a transfer's fraud check needs.
+var followUpLimit = builder.Configuration.GetValue("Lab:FollowUpMaxConcurrent", 0);
+if (followUpLimit > 0)
+{
+    builder.Services.AddHttpClient<FollowUp>().AddResilienceHandler("follow-up-bulkhead", pipeline =>
+        pipeline.AddConcurrencyLimiter(followUpLimit, queueLimit: 100_000));
+}
+// #endregion follow-up-bulkhead
 var requestTimeoutMs = builder.Configuration.GetValue("Lab:RequestTimeoutMs", 0);
 if (requestTimeoutMs > 0)
 {

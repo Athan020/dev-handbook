@@ -350,10 +350,15 @@ public sealed class BackgroundFollowUpQueue
 }
 
 /// <summary>Drains <see cref="BackgroundFollowUpQueue"/>, one transfer at a time.</summary>
-public sealed class BackgroundFollowUpService(BackgroundFollowUpQueue queue, IServiceScopeFactory scopes, ILogger<BackgroundFollowUpService> log)
+public sealed class BackgroundFollowUpService(
+    BackgroundFollowUpQueue queue, IServiceScopeFactory scopes, IConfiguration config, ILogger<BackgroundFollowUpService> log)
     : BackgroundService
 {
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    // B4 stage 4: Lab:FollowUpConcurrency workers drain the queue at once (default 1).
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
+        Task.WhenAll(Enumerable.Range(0, config.GetValue("Lab:FollowUpConcurrency", 1)).Select(_ => DrainAsync(stoppingToken)));
+
+    private async Task DrainAsync(CancellationToken stoppingToken)
     {
         await foreach (var transfer in queue.ReadAllAsync(stoppingToken))
         {
