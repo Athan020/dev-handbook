@@ -22,6 +22,8 @@
 //
 // --outgoing N sends N payments to another bank and compares the two sides (B3 stage 6).
 //
+// --outage runs transfers through a fraud-service outage and prints a timeline (B4).
+//
 // --race N runs rounds of a race (B3 stage 1): open an account, deposit --deposit (default 100),
 // then send N transfers of --amount (default 60) from it, all at once. It reports how the API
 // answered, and in how many of --rounds rounds (default 50) the account ended up overdrawn.
@@ -238,6 +240,90 @@ if (Array.IndexOf(args, "--outgoing") is var outgoingAt and >= 0)
     return;
 }
 
+// --outage (B4): transfers from --concurrency clients for --seconds (default 40), while a
+// bystander reads account summaries every 250 ms, to see whether the API still answers anyone.
+// --blip-at T --blip-seconds D takes the fraud service down for D seconds, T seconds in. At the
+// end it prints a timeline, second by second, alongside what the fraud service saw.
+if (args.Contains("--outage"))
+{
+    var seconds = Arg("--seconds", 40);
+    var fraudUrl = Array.IndexOf(args, "--fraud") is var f and >= 0 ? args[f + 1] : "http://localhost:5090";
+    using var fraudHttp = new HttpClient { BaseAddress = new Uri(fraudUrl) };
+    (await fraudHttp.PostAsync("/fraud/reset", null)).EnsureSuccessStatusCode();
+
+    var timeline = new System.Collections.Concurrent.ConcurrentDictionary<int, OutageSecond>();
+    OutageSecond At(int second) => timeline.GetOrAdd(second, _ => new OutageSecond());
+    var clock = Stopwatch.StartNew();
+    int Now() => (int)clock.Elapsed.TotalSeconds;
+
+    var blip = Array.IndexOf(args, "--blip-at") >= 0
+        ? Task.Run(async () =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(Arg("--blip-at", 10)));
+            await fraudHttp.PostAsync($"/fraud/blip?seconds={Arg("--blip-seconds", 5)}", null);
+        })
+        : Task.CompletedTask;
+
+    var clients = Enumerable.Range(0, options.Concurrency).Select(async _ =>
+    {
+        while (clock.Elapsed.TotalSeconds < seconds)
+        {
+            var started = Now();
+            var timer = Stopwatch.StartNew();
+            string outcome;
+            try
+            {
+                using var response = await http.PostAsJsonAsync("/transfers", options.NextTransfer());
+                outcome = ((int)response.StatusCode).ToString(CultureInfo.InvariantCulture);
+            }
+            catch (TaskCanceledException)
+            {
+                outcome = "no answer";
+            }
+            catch (HttpRequestException)
+            {
+                outcome = "refused";
+            }
+            At(started).Record(outcome, timer.Elapsed.TotalMilliseconds);
+        }
+    }).ToList();
+
+    var bystander = Task.Run(async () =>
+    {
+        while (clock.Elapsed.TotalSeconds < seconds)
+        {
+            var started = Now();
+            var timer = Stopwatch.StartNew();
+            try
+            {
+                using var response = await http.GetAsync($"/accounts/{options.NextAccount()}/summary");
+                At(started).Bystander(timer.Elapsed.TotalMilliseconds, response.IsSuccessStatusCode);
+            }
+            catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+            {
+                At(started).Bystander(timer.Elapsed.TotalMilliseconds, ok: false);
+            }
+            await Task.Delay(250);
+        }
+    });
+
+    await Task.WhenAll([.. clients, bystander, blip]);
+    var fraudStats = await fraudHttp.GetFromJsonAsync<FraudStatsBody>("/fraud/stats");
+    var fraudBySecond = (fraudStats?.Seconds ?? []).ToDictionary(s => s.Second);
+
+    Console.WriteLine($"{options.Concurrency} clients sending transfers for {seconds}s.");
+    Console.WriteLine("  s | transfers: ok   other  p50 ms | bystander: worst ms  failed | fraud service: calls  refused  failed");
+    foreach (var (second, data) in timeline.OrderBy(t => t.Key))
+    {
+        var fs = fraudBySecond.GetValueOrDefault(second);
+        Console.WriteLine($"{second,3} | {data.Ok,14} {data.Other,7} {data.P50,7:F0} | {data.BystanderWorst,19:F0} {data.BystanderFailed,7} | {fs?.Received ?? 0,20} {fs?.Refused ?? 0,8} {fs?.Failed ?? 0,7}");
+    }
+    var everySecond = timeline.Values;
+    Console.WriteLine($"Totals: {everySecond.Sum(d => d.Ok)} transfers succeeded; others: {string.Join(", ", everySecond.SelectMany(d => d.Outcomes).GroupBy(o => o.Key).Where(g => g.Key != "201").Select(g => $"{g.Key} x {g.Sum(o => o.Value)}"))}; " +
+        $"bystander failed {everySecond.Sum(d => d.BystanderFailed)} times, worst {everySecond.Max(d => d.BystanderWorst):F0} ms; fraud service received {fraudStats?.Seconds.Sum(s => s.Received) ?? 0} calls.");
+    return;
+}
+
 // --crossfire N (B3 stage 2): two accounts paying each other, A to B and B to A, N transfers in all.
 if (Array.IndexOf(args, "--crossfire") is var crossAt and >= 0)
 {
@@ -360,6 +446,41 @@ sealed record OpenedAccount(int Id);
 sealed record Summary(decimal Balance);
 
 sealed record StatusCount(string Status, int Count, decimal Amount);
+
+sealed record FraudStatsBody(List<FraudStatsSecond> Seconds);
+
+sealed record FraudStatsSecond(int Second, int Received, int Served, int Refused, int Failed);
+
+sealed class OutageSecond
+{
+    private readonly object _gate = new();
+    private readonly List<double> _latencies = [];
+
+    public Dictionary<string, int> Outcomes { get; } = [];
+    public int Ok => Outcomes.GetValueOrDefault("201");
+    public int Other => Outcomes.Where(o => o.Key != "201").Sum(o => o.Value);
+    public double P50 { get { lock (_gate) { return _latencies.Count == 0 ? 0 : _latencies.Order().ElementAt(_latencies.Count / 2); } } }
+    public double BystanderWorst { get; private set; }
+    public int BystanderFailed { get; private set; }
+
+    public void Record(string outcome, double ms)
+    {
+        lock (_gate)
+        {
+            Outcomes[outcome] = Outcomes.GetValueOrDefault(outcome) + 1;
+            _latencies.Add(ms);
+        }
+    }
+
+    public void Bystander(double ms, bool ok)
+    {
+        lock (_gate)
+        {
+            BystanderWorst = Math.Max(BystanderWorst, ms);
+            if (!ok) BystanderFailed++;
+        }
+    }
+}
 
 sealed record NetworkStats(int Settlements, int DistinctReferences, decimal AmountSettled);
 

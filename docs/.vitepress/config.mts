@@ -56,6 +56,19 @@ const backendJourneys: { slug: string; text: string; stages: [string, string][] 
       ['07-reconciliation', '7. Reconciliation'],
     ],
   },
+  {
+    slug: 'things-fail',
+    text: 'B4: Things fail',
+    stages: [
+      ['01-waiting-forever', '1. Waiting forever'],
+      ['02-retries-that-make-it-worse', '2. Retries that make it worse'],
+      ['03-stop-calling-whats-down', "3. Stop calling what's down"],
+      ['04-bulkheads', '4. One slow dependency sinks everything'],
+      ['05-degrade-dont-fail', "5. Degrade, don't fail"],
+      ['06-rate-limiting', '6. Protect yourself from your callers'],
+      ['07-prove-it-works', '7. Prove it works before you need it'],
+    ],
+  },
 ]
 
 const backendSidebar: DefaultTheme.SidebarItem[] = [

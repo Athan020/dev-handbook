@@ -66,6 +66,19 @@ public static class TransferEndpoints
         }
         var claim = keyMode == "Keys" ? (key, requestHash) : ((string, string)?)null;
 
+        // B4: ask the fraud service before moving any money, either here, before the database
+        // transaction, or (Lab:FraudGate=InTransaction) inside it, holding a connection while it waits.
+        var fraud = config["Lab:FraudGate"] is "BeforeTransaction" or "InTransaction" ? services.GetRequiredService<FraudClient>() : null;
+        if (fraud is not null && config["Lab:FraudGate"] == "BeforeTransaction")
+        {
+            var outcome = await fraud.DecideAsync(request.FromAccountId, request.ToAccountId, request.Amount, ct);
+            if (outcome.Decision != FraudDecision.Approved)
+            {
+                return FraudRefusal(outcome);
+            }
+        }
+        var fraudInTransaction = config["Lab:FraudGate"] == "InTransaction" ? fraud : null;
+
         // #region retry-loop
         // B3: a transaction that lost a race (a serialization failure or a deadlock) is rolled
         // back. Run the whole transaction again, up to Lab:Retries times, then give up with 409.
@@ -74,7 +87,7 @@ public static class TransferEndpoints
         {
             try
             {
-                recorded = await RecordTransferAsync(db, request, outbox, config, claim, ct);
+                recorded = await RecordTransferAsync(db, request, outbox, config, claim, fraudInTransaction, ct);
                 break;
             }
             catch (Exception e) when (Funds.IsRetryable(e))
@@ -87,6 +100,11 @@ public static class TransferEndpoints
             }
         }
         // #endregion retry-loop
+
+        if (recorded.Fraud is { } refused)
+        {
+            return FraudRefusal(refused);
+        }
 
         switch (recorded.Previous)
         {
@@ -169,7 +187,15 @@ public static class TransferEndpoints
         statusCode: StatusCodes.Status422UnprocessableEntity,
         title: "This Idempotency-Key was already used with a different request.");
 
-    private sealed record Recorded(TransferCompleted? Transfer, Idempotency.Claim? Previous = null);
+    // #region fraud-refusal
+    // Declined means the fraud service said no. Unavailable means we couldn't get an answer:
+    // failing closed, the transfer isn't made, and the customer is asked to try again shortly.
+    private static IResult FraudRefusal(FraudOutcome outcome) => outcome.Decision == FraudDecision.Declined
+        ? Results.Problem(statusCode: StatusCodes.Status422UnprocessableEntity, title: "Declined by fraud checks.")
+        : Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "Fraud checks are unavailable. Try again shortly.", detail: outcome.Detail);
+    // #endregion fraud-refusal
+
+    private sealed record Recorded(TransferCompleted? Transfer, Idempotency.Claim? Previous = null, FraudOutcome? Fraud = null);
 
     /// <summary>
     /// B2 stage 5: opens an account and saves an AccountOpened event in the outbox, in one
@@ -204,9 +230,23 @@ public static class TransferEndpoints
     /// that make it safe to move money (see Funds): returns null if the account can't afford it.
     /// </summary>
     private static async Task<Recorded> RecordTransferAsync(
-        BankDb db, TransferRequest request, bool outbox, IConfiguration config, (string Key, string Hash)? claim, CancellationToken ct)
+        BankDb db, TransferRequest request, bool outbox, IConfiguration config, (string Key, string Hash)? claim,
+        FraudClient? fraudInTransaction, CancellationToken ct)
     {
         await using var dbTransaction = await db.Database.BeginTransactionAsync(Funds.Isolation(config), ct);
+
+        // #region fraud-in-transaction
+        // B4 stage 1's starting point: the fraud check inside the transaction. The transaction
+        // holds a database connection for as long as the fraud service takes to answer.
+        if (fraudInTransaction is not null)
+        {
+            var outcome = await fraudInTransaction.DecideAsync(request.FromAccountId, request.ToAccountId, request.Amount, ct);
+            if (outcome.Decision != FraudDecision.Approved)
+            {
+                return new Recorded(null, Fraud: outcome);
+            }
+        }
+        // #endregion fraud-in-transaction
 
         // #region claim-in-transaction
         // B3 stage 3 (Lab:Idempotency=Keys): claim the key first, in this transaction. A key

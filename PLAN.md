@@ -3,7 +3,7 @@
 > A VitePress site for building **T-shaped** software engineering skills, organised by orientation (frontend or backend). It is meant to help engineers grow in their current role and prepare for multi-round interviews. It teaches judgement: creative problem solving that still respects good practice.
 
 **Plan version:** v2 (journey-based). Supersedes v1, which was topic-based and migration-first. See §9.
-**Status:** Phase 4 in progress (started 2026-10-12): B3 complete and approved (2026-10-15); proposing B4. Phase 3 complete and approved (2026-10-12).
+**Status:** Phase 4 in progress (started 2026-10-12): writing B4 (approved 2026-10-15). B3 complete and approved (2026-10-15). Phase 3 complete and approved (2026-10-12).
 **Owner:** Athan
 **Source material:** `_source/backend-engineer-kb/` is a **quarry, not a blueprint**. See §6.
 
@@ -131,7 +131,18 @@ docs/
 | 7 | Reconciliation: matching the ledger against the other side, timing differences vs breaks, daily close | "The network's settlement file says we sent more than our ledger does" |
 | ★ | Capstone: "Design a transfer between accounts" | — |
 
-**B4 — Things fail** *(Phase 4)*: timeouts (connect vs request timeouts, propagating deadlines between services), retries with backoff and jitter, circuit breakers and bulkheads, graceful degradation, rate limiting. Capstone: *design a rate limiter*.
+**B4 — Things fail** *(Phase 4, approved 2026-10-15)*
+
+| # | Stage | Triggered by |
+|---|---|---|
+| 1 | Waiting forever: timeouts on every call (connect vs request), deadline propagation, cancellation | "The fraud service hung for 90 seconds, and the transfer API stopped answering anyone" |
+| 2 | Retries that make it worse: retry only transient, idempotent failures; exponential backoff with jitter; retry budgets; retry amplification across layers | "The fraud service blipped, every caller retried at once, and the blip became an outage" |
+| 3 | Stop calling what's down: circuit breakers (states, thresholds, half-open probes) | "The fraud service is down for ten minutes, and every transfer waits for a timeout before failing" |
+| 4 | One slow dependency sinks everything: bulkheads (a concurrency limit or pool per dependency), load shedding | "The email provider slowed down, and fraud checks queued behind it in the same connection pool" |
+| 5 | Degrade, don't fail: fallbacks as business decisions (small transfers allowed and large ones held when fraud is down), cached answers, a second provider, feature switches | "With the circuit open, every transfer fails, and support is flooded" |
+| 6 | Protect yourself from your callers: rate limiting (token bucket, fixed and sliding windows), per-client limits, 429 with Retry-After, distributed limits | "One partner's broken integration sends thousands of requests a second, and every customer slows down" |
+| 7 | Prove it works before you need it: fault injection, testing timeouts and breakers, game days, alerting on breaker state | "The breaker was configured, but it had never opened, and in the next outage it didn't either" |
+| ★ | Capstone: "Design a rate limiter" | — |
 
 **B5 — One service becomes many** *(Phase 4)*: modular monolith first, boundaries (bounded contexts), data ownership, sync vs async between services, sagas, API gateways, strangler-fig migration. Capstone: *migrate a capability out of a monolith*.
 

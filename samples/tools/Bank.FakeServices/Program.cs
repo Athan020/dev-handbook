@@ -16,6 +16,16 @@
 //
 // GET /network/payments is its settlement record: every payment it made, which stage 7
 // reconciles. amountErrorRate and missingFromRecordsRate add the network's own mistakes.
+//
+// Journey B4 adds a fraud decision service under /fraud: POST /fraud/decision approves or
+// declines a transfer before it happens. It has a fixed capacity, so overload makes it slower,
+// then makes it refuse calls. It can also be down, hang, or fail at random:
+//
+//   curl -X POST localhost:5090/fraud/settings -H "Content-Type: application/json" \
+//        -d '{"mode": "hang", "capacity": 50}'
+//   curl -X POST "localhost:5090/fraud/blip?seconds=5"      (down for five seconds, then back)
+//
+// GET /fraud/stats shows, second by second, how many calls arrived and what happened to them.
 using System.Collections.Concurrent;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -180,6 +190,89 @@ app.MapPost("/network/reset", () =>
 });
 // #endregion network
 
+// #region fraud-decision
+var fraud = new FraudSettings();
+var fraudGate = new SemaphoreSlim(int.MaxValue);
+var fraudWaiting = 0;
+DateTimeOffset? fraudDownUntil = null;
+var fraudStarted = DateTimeOffset.UtcNow;
+var fraudTimeline = new ConcurrentDictionary<long, FraudSecond>(); // by second since the last reset
+
+FraudSecond Second() => fraudTimeline.GetOrAdd((long)(DateTimeOffset.UtcNow - fraudStarted).TotalSeconds, _ => new FraudSecond());
+
+app.MapPost("/fraud/decision", async (FraudDecisionRequest request, CancellationToken ct) =>
+{
+    var current = fraud;
+    var second = Second();
+    Interlocked.Increment(ref second.Received);
+
+    if (current.Mode == "down" || fraudDownUntil > DateTimeOffset.UtcNow)
+    {
+        await Task.Delay(5, ct);
+        Interlocked.Increment(ref second.Failed);
+        return Results.StatusCode(503);
+    }
+
+    // A fixed capacity: calls beyond it wait their turn; past the queue limit, they're refused.
+    if (Interlocked.Increment(ref fraudWaiting) > current.Capacity + current.QueueLimit && current.Capacity > 0)
+    {
+        Interlocked.Decrement(ref fraudWaiting);
+        Interlocked.Increment(ref second.Refused);
+        return Results.StatusCode(503);
+    }
+    try
+    {
+        await fraudGate.WaitAsync(ct);
+        try
+        {
+            await Task.Delay(current.Mode == "hang" ? current.HangMs : current.DelayMs, ct);
+            if (Random.Shared.NextDouble() < current.FailureRate)
+            {
+                Interlocked.Increment(ref Second().Failed);
+                return Results.StatusCode(500);
+            }
+            Interlocked.Increment(ref Second().Served);
+            return Results.Ok(new { decision = request.Amount > 100_000m ? "decline" : "approve" });
+        }
+        finally
+        {
+            fraudGate.Release();
+        }
+    }
+    finally
+    {
+        Interlocked.Decrement(ref fraudWaiting);
+    }
+});
+
+app.MapPost("/fraud/settings", (FraudSettings next) =>
+{
+    fraud = next;
+    fraudGate = new SemaphoreSlim(next.Capacity > 0 ? next.Capacity : int.MaxValue);
+    return fraud;
+});
+
+app.MapPost("/fraud/blip", (int seconds) =>
+{
+    fraudDownUntil = DateTimeOffset.UtcNow.AddSeconds(seconds);
+    return Results.Ok(new { downUntil = fraudDownUntil });
+});
+
+app.MapGet("/fraud/stats", () => new
+{
+    settings = fraud,
+    seconds = fraudTimeline.OrderBy(s => s.Key).Select(s => new { second = s.Key, s.Value.Received, s.Value.Served, s.Value.Refused, s.Value.Failed }),
+});
+
+app.MapPost("/fraud/reset", () =>
+{
+    fraudTimeline.Clear();
+    fraudStarted = DateTimeOffset.UtcNow;
+    fraudDownUntil = null;
+    return Results.Ok();
+});
+// #endregion fraud-decision
+
 app.Run();
 
 static object Lags(IEnumerable<double> values)
@@ -197,3 +290,13 @@ sealed record NetworkSettings(
     double AmountErrorRate = 0, double MissingFromRecordsRate = 0);
 sealed record NetworkPaymentRequest(string Reference, decimal Amount, string ToBank, string ToAccount);
 sealed record NetworkPayment(string Reference, decimal Amount, string ToBank, string ToAccount, DateTimeOffset SettledAt);
+
+sealed record FraudSettings(string Mode = "up", int DelayMs = 20, int HangMs = 90_000, double FailureRate = 0, int Capacity = 0, int QueueLimit = 0);
+sealed record FraudDecisionRequest(int FromAccountId, int ToAccountId, decimal Amount);
+sealed class FraudSecond
+{
+    public int Received;
+    public int Served;
+    public int Refused;
+    public int Failed;
+}

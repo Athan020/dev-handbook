@@ -31,6 +31,17 @@ builder.Services.AddHttpClient<NetworkClient>(http =>
     http.Timeout = TimeSpan.FromMilliseconds(builder.Configuration.GetValue("Network:TimeoutMs", 1000));
 });
 builder.Services.AddHostedService<PendingPaymentResolver>();
+
+// Journey B4: the fraud gate on transfers, and an optional deadline for every request.
+builder.Services.AddFraudGate(builder.Configuration);
+var requestTimeoutMs = builder.Configuration.GetValue("Lab:RequestTimeoutMs", 0);
+if (requestTimeoutMs > 0)
+{
+    // #region request-timeouts
+    builder.Services.AddRequestTimeouts(options => options.DefaultPolicy =
+        new Microsoft.AspNetCore.Http.Timeouts.RequestTimeoutPolicy { Timeout = TimeSpan.FromMilliseconds(requestTimeoutMs) });
+    // #endregion request-timeouts
+}
 builder.Services.AddHostedService<OutboxRelay>();
 builder.Services.AddProblemDetails();
 builder.Services.AddMemoryCache();
@@ -76,7 +87,17 @@ if (args is ["schema"])
 }
 
 app.UseExceptionHandler();
+// #region request-deadline
+// B4 stage 1: with Lab:RequestTimeoutMs, every request has a deadline. When it passes, the
+// request's cancellation token fires, and every call made with that token stops waiting.
+if (requestTimeoutMs > 0)
+{
+    app.UseRequestTimeouts();
+}
+// #endregion request-deadline
+
 app.MapGet("/health", () => Results.Ok("healthy"));
+app.MapGet("/resilience/fraud", (FraudStats stats) => stats.Snapshot());
 app.MapAccountEndpoints();
 app.MapSummaryEndpoints();
 app.MapTransferEndpoints();

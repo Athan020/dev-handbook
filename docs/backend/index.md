@@ -23,10 +23,10 @@ The bar is everything around that core which senior work and senior interviews p
 | [B1: Your API gets popular](./journeys/your-api-gets-popular/) | Traffic grows until the database can't keep up | Reads are degrading on a 10M-row table |
 | [B2: Work that shouldn't happen in the request](./journeys/work-outside-the-request/) | Slow, unreliable work inside the request | Design a multi-channel notification system |
 | [B3: The money must add up](./journeys/the-money-must-add-up/) | Concurrency, retries and audits threaten correctness | Design a transfer between accounts |
+| [B4: Things fail](./journeys/things-fail/) | Dependencies are slow, wrong or down; callers misbehave | Design a rate limiter |
 
 ### Coming later
 
-- **B4: Things fail.** Timeouts and deadlines, retries with backoff and jitter, circuit breakers and bulkheads, graceful degradation, rate limiting.
 - **B5: One service becomes many.** Modular monolith first, bounded contexts, data ownership, sync vs async between services, sagas, API gateways, strangler-fig migration.
 - **B6: Shipping it safely.** Pipelines, environments, infrastructure as code, zero-downtime database migrations, deployment strategies, feature flags, rollbacks.
 - **B7: Where your code actually runs.** The request path from client to process, connection reuse, CPU, memory and thread-pool limits, containers vs VMs vs serverless, scaling.
