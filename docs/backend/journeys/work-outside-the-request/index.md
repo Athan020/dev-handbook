@@ -2,7 +2,7 @@
 title: "B2: Work that shouldn't happen in the request"
 track: backend
 journey: work-outside-the-request
-status: draft
+status: written
 ---
 
 # B2: Work that shouldn't happen in the request

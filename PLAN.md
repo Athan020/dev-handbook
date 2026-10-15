@@ -3,7 +3,7 @@
 > A VitePress site for building **T-shaped** software engineering skills, organised by orientation (frontend or backend). It is meant to help engineers grow in their current role and prepare for multi-round interviews. It teaches judgement: creative problem solving that still respects good practice.
 
 **Plan version:** v2 (journey-based). Supersedes v1, which was topic-based and migration-first. See §9.
-**Status:** Phase 4 in progress (started 2026-10-12): B3 complete, awaiting review (2026-10-14); B4 not started. Phase 3 complete and approved (2026-10-12).
+**Status:** Phase 4 in progress (started 2026-10-12): B3 complete and approved (2026-10-15); proposing B4. Phase 3 complete and approved (2026-10-12).
 **Owner:** Athan
 **Source material:** `_source/backend-engineer-kb/` is a **quarry, not a blueprint**. See §6.
 
@@ -41,9 +41,11 @@ This is the T in practice. The journey runs down the reader's core skill and out
 | Static site generator | VitePress (latest stable) | No |
 | Diagrams | Mermaid, rendered by our own `MermaidDiagram` theme component (loaded only on pages with diagrams). Replaced `vitepress-plugin-mermaid`, which stalled. Playwright tests check every diagram renders in both themes | Build-time SVG rendering if client-side rendering causes problems |
 | Search | VitePress built-in local search | Later, if Algolia is needed |
-| Hosting | GitHub Pages via GitHub Actions | Yes, could be Netlify or Vercel |
+| Hosting | GitHub Pages via GitHub Actions, live at https://athan020.github.io/dev-handbook/ (confirmed 2026-10-15) | No |
 | Organising unit | Journeys of stages, not topic folders | No |
-| Backend code language | C# primary, concepts language-neutral | Yes |
+| Backend code language | C# primary, concepts language-neutral. Other languages (Java, Go, Python) to come as VitePress code groups on explanatory snippets; labs stay C# (decided 2026-10-15; pilot on one journey in Phase 6) | Yes |
+| Visibility | The repository and the site are public (decided 2026-10-15). No personal context beyond the owner's first name; `_source/` stays untracked | No |
+| Fullstack | No separate track: cross-links between backend and frontend journeys cover it (decided 2026-10-15) | Yes |
 | Source KB | `_source/`, read-only, excluded from the build with `srcExclude`, mined per module | No |
 | Runnable code | `samples/` .NET solution plus Docker Compose labs, imported into pages with `<<< @/…` | No |
 | Shared concept pages | A `reference/` page exists only once **two or more** journeys need the same concept | No |
@@ -303,11 +305,11 @@ Order: **B3 → B4 → B5 → B6 → B7 → B8 → B9.** For each journey, first
 - Per-journey progress checklists (localStorage, try/catch, works without storage).
 - Two suggested paths per track: **growth** (journeys in order) and **interview in two weeks** (capstones first, then the stages they lean on, plus assessments).
 - Accessibility and mobile pass, and a link checker in CI.
+- Pilot code groups with Java, Go and Python versions of the explanatory snippets on one journey (§3); extend if it reads well.
 - Revisit (raised 2026-10-12): CAP and PACELC aren't covered anywhere. Proposed home: a `backend/reference/` page on consistency (CAP as a choice during partitions, linearizability vs ACID consistency, PACELC's latency-vs-consistency trade-off, tunable consistency), linked from B1 stage 6, B2, B3 and B5. Also run a gap check of classic system-design interview topics (quorums, consensus and leader election, two-phase commit, clocks) against the journeys, and report where each belongs.
 
 ## 11. Open questions
 
-- Hosting: GitHub Pages, or Netlify/Vercel with preview deploys?
-- Will the site be public? This affects licensing and how much personal context is included.
-- Should there be a fullstack track, or do cross-links between journeys cover it?
-- Add other backend languages (Java, Go, Python) through code groups, and if so, when?
+Answered 2026-10-15 (hosting, visibility, fullstack, other languages): see §3.
+
+- Licence: a public repository with no licence is "all rights reserved", so others can read it but not reuse it. Choose one, for example CC BY 4.0 for the writing and MIT for the code.
