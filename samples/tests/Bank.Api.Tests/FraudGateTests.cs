@@ -68,3 +68,28 @@ public sealed class FraudGateTests(BankApiFixture fixture) : IClassFixture<BankA
         Assert.True(timer.Elapsed < TimeSpan.FromSeconds(5), $"took {timer.Elapsed}");
     }
 }
+
+/// <summary>B4 stage 2: the retry budget caps retries at a share of recent calls.</summary>
+public sealed class RetryBudgetTests
+{
+    [Fact]
+    public void Retries_stop_at_ten_plus_the_percentage_of_calls()
+    {
+        var budget = new RetryBudget(percent: 10);
+        for (var i = 0; i < 1_000; i++)
+        {
+            budget.CountCall();
+        }
+
+        var allowed = Enumerable.Range(0, 1_000).Count(_ => budget.TryRetry());
+
+        Assert.Equal(110, allowed); // 10 to spare, plus 10% of 1,000 calls
+    }
+
+    [Fact]
+    public void With_no_calls_only_the_spare_retries_are_allowed()
+    {
+        var budget = new RetryBudget(percent: 10);
+        Assert.Equal(10, Enumerable.Range(0, 100).Count(_ => budget.TryRetry()));
+    }
+}

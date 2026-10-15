@@ -9,6 +9,7 @@ import MermaidDiagram from './components/MermaidDiagram.vue'
 import OutboxSimulator from './components/OutboxSimulator.vue'
 import PoolSimulator from './components/PoolSimulator.vue'
 import ReplicaSimulator from './components/ReplicaSimulator.vue'
+import RetryStormSimulator from './components/RetryStormSimulator.vue'
 import SqlPlayground from './components/SqlPlayground.vue'
 import StopAndThink from './components/StopAndThink.vue'
 import './custom.css'
@@ -27,5 +28,6 @@ export default {
     app.component('OutboxSimulator', OutboxSimulator)
     app.component('BacklogSimulator', BacklogSimulator)
     app.component('InterleavingSimulator', InterleavingSimulator)
+    app.component('RetryStormSimulator', RetryStormSimulator)
   },
 } satisfies Theme

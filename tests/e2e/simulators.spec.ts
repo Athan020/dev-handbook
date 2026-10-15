@@ -289,3 +289,44 @@ test.describe('interleaving simulator', () => {
     await expect(verdict(sim)).toContainText('Correct')
   })
 })
+
+test.describe('retry storm simulator', () => {
+  const url = '/backend/journeys/things-fail/02-retries-that-make-it-worse'
+
+  async function choose(page: Page, policy: string) {
+    await page.goto(url)
+    const sim = page.locator('.retry-storm')
+    await sim.locator(`[data-policy="${policy}"]`).click()
+    return sim
+  }
+  const recovered = (sim: Locator) => sim.locator('[data-stat="recovered"]')
+
+  test('without retries, the service recovers soon after the blip', async ({ page }) => {
+    await expect(recovered(await choose(page, 'none'))).toContainText('s after the blip began')
+  })
+
+  test('immediate retries, backoff and jitter all keep it overloaded', async ({ page }) => {
+    for (const policy of ['immediate', 'backoff', 'jitter']) {
+      await expect(recovered(await choose(page, policy))).toHaveText('not within 50 s')
+    }
+  })
+
+  test('a retry budget lets it recover', async ({ page }) => {
+    await expect(recovered(await choose(page, 'budget'))).toContainText('s after the blip began')
+  })
+
+  test('a service that drops abandoned work recovers even with immediate retries', async ({ page }) => {
+    const sim = await choose(page, 'immediate')
+    await sim.getByLabel('The service finishes requests whose callers have given up').uncheck()
+    await expect(recovered(sim)).toContainText('s after the blip began')
+  })
+
+  test('hovering the chart reports that second', async ({ page }) => {
+    const sim = await choose(page, 'immediate')
+    const chart = sim.locator('svg')
+    await chart.scrollIntoViewIfNeeded()
+    const box = (await chart.boundingBox())!
+    await page.mouse.move(box.x + box.width * 0.6, box.y + box.height / 2)
+    await expect(sim.locator('.tooltip')).toContainText('calls reached the fraud service')
+  })
+})

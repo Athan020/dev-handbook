@@ -24,7 +24,8 @@ public sealed record FraudOutcome(FraudDecision Decision, string Detail);
 /// Fraud section, so each stage can switch one mechanism on:
 ///   Lab:FraudGate=Off (the default) | InTransaction | BeforeTransaction  where the call is made
 ///   Fraud:TimeoutMs        a timeout for each attempt (0: none, so HttpClient's 100 s default)
-///   Fraud:Retries, Fraud:RetryDelayMs, Fraud:Backoff=Constant|Exponential, Fraud:Jitter=true
+///   Fraud:Retries, Fraud:RetryDelayMs, Fraud:Backoff=Constant|Exponential, Fraud:Jitter=true,
+///   Fraud:RetryBudgetPercent (retries allowed as a percentage of recent calls)
 ///   Fraud:Breaker=true, Fraud:BreakerFailureRatio, Fraud:BreakerMinimumThroughput,
 ///   Fraud:BreakerSamplingSeconds, Fraud:BreakerBreakSeconds
 ///   Fraud:MaxConcurrent, Fraud:QueueLimit   a bulkhead: calls allowed at once, and waiting
@@ -59,12 +60,20 @@ public static class FraudGate
         // #region retry
         if (fraud.GetValue("Retries", 0) is var retries and > 0)
         {
+            var budget = fraud.GetValue("RetryBudgetPercent", 0) is var percent and > 0 ? new RetryBudget(percent) : null;
+            if (budget is not null)
+            {
+                pipeline.AddStrategy(_ => new CountCalls(budget), new CountCallsOptions()); // outside the retries: once per call
+            }
+            var transient = new HttpRetryStrategyOptions().ShouldHandle; // timeouts, 5xx, 429, connection errors
             pipeline.AddRetry(new HttpRetryStrategyOptions
             {
                 MaxRetryAttempts = retries,
                 Delay = TimeSpan.FromMilliseconds(fraud.GetValue("RetryDelayMs", 200)),
                 BackoffType = fraud["Backoff"] == "Exponential" ? DelayBackoffType.Exponential : DelayBackoffType.Constant,
                 UseJitter = fraud.GetValue("Jitter", false),
+                // Retry only transient failures, and only while retries are a small share of calls.
+                ShouldHandle = async args => await transient(args) && (budget?.TryRetry() ?? true),
                 OnRetry = _ => { stats.Count("retry"); return default; },
             });
         }
@@ -168,3 +177,65 @@ public sealed class FraudClient(HttpClient http, FraudStats stats)
 
     private sealed record DecisionBody(string Decision);
 }
+
+// #region retry-budget
+/// <summary>
+/// B4 stage 2: retries are allowed only while they're at most a set percentage of recent calls
+/// (over the last ten seconds), plus a few to spare. When a dependency is failing everything,
+/// retries can't multiply the load: they're capped at a fraction of it.
+/// </summary>
+public sealed class RetryBudget(int percent)
+{
+    private readonly object _gate = new();
+    private readonly Queue<(DateTimeOffset At, bool Retry)> _recent = new();
+
+    public void CountCall() => Add(retry: false);
+
+    public bool TryRetry()
+    {
+        lock (_gate)
+        {
+            Trim();
+            var calls = _recent.Count(r => !r.Retry);
+            var retries = _recent.Count(r => r.Retry);
+            if (retries >= 10 + calls * percent / 100)
+            {
+                return false;
+            }
+            _recent.Enqueue((DateTimeOffset.UtcNow, true));
+            return true;
+        }
+    }
+
+    private void Add(bool retry)
+    {
+        lock (_gate)
+        {
+            Trim();
+            _recent.Enqueue((DateTimeOffset.UtcNow, retry));
+        }
+    }
+
+    private void Trim()
+    {
+        var cutoff = DateTimeOffset.UtcNow.AddSeconds(-10);
+        while (_recent.Count > 0 && _recent.Peek().At < cutoff)
+        {
+            _recent.Dequeue();
+        }
+    }
+}
+// #endregion retry-budget
+
+/// <summary>Counts each original call (not each retry) towards the retry budget.</summary>
+internal sealed class CountCalls(RetryBudget budget) : ResilienceStrategy
+{
+    protected override ValueTask<Outcome<TResult>> ExecuteCore<TResult, TState>(
+        Func<ResilienceContext, TState, ValueTask<Outcome<TResult>>> callback, ResilienceContext context, TState state)
+    {
+        budget.CountCall();
+        return callback(context, state);
+    }
+}
+
+internal sealed class CountCallsOptions : ResilienceStrategyOptions;

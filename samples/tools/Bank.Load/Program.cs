@@ -251,6 +251,13 @@ if (args.Contains("--outage"))
     using var fraudHttp = new HttpClient { BaseAddress = new Uri(fraudUrl) };
     (await fraudHttp.PostAsync("/fraud/reset", null)).EnsureSuccessStatusCode();
 
+    // Warm up first, so start-up costs (compilation, connection pools) don't look like an outage.
+    for (var i = 0; i < 50; i++)
+    {
+        try { using var _ = await http.PostAsJsonAsync("/transfers", options.NextTransfer()); } catch (Exception e) when (e is HttpRequestException or TaskCanceledException) { }
+    }
+    (await fraudHttp.PostAsync("/fraud/reset", null)).EnsureSuccessStatusCode();
+
     var timeline = new System.Collections.Concurrent.ConcurrentDictionary<int, OutageSecond>();
     OutageSecond At(int second) => timeline.GetOrAdd(second, _ => new OutageSecond());
     var clock = Stopwatch.StartNew();
@@ -260,33 +267,58 @@ if (args.Contains("--outage"))
         ? Task.Run(async () =>
         {
             await Task.Delay(TimeSpan.FromSeconds(Arg("--blip-at", 10)));
-            await fraudHttp.PostAsync($"/fraud/blip?seconds={Arg("--blip-seconds", 5)}", null);
+            var kind = Array.IndexOf(args, "--blip-kind") is var k and >= 0 ? args[k + 1] : "down";
+            await fraudHttp.PostAsync($"/fraud/blip?seconds={Arg("--blip-seconds", 5)}&kind={kind}", null);
         })
         : Task.CompletedTask;
 
-    var clients = Enumerable.Range(0, options.Concurrency).Select(async _ =>
+    async Task SendOneAsync()
     {
-        while (clock.Elapsed.TotalSeconds < seconds)
+        var started = Now();
+        var timer = Stopwatch.StartNew();
+        string outcome;
+        try
         {
-            var started = Now();
-            var timer = Stopwatch.StartNew();
-            string outcome;
-            try
-            {
-                using var response = await http.PostAsJsonAsync("/transfers", options.NextTransfer());
-                outcome = ((int)response.StatusCode).ToString(CultureInfo.InvariantCulture);
-            }
-            catch (TaskCanceledException)
-            {
-                outcome = "no answer";
-            }
-            catch (HttpRequestException)
-            {
-                outcome = "refused";
-            }
-            At(started).Record(outcome, timer.Elapsed.TotalMilliseconds);
+            using var response = await http.PostAsJsonAsync("/transfers", options.NextTransfer());
+            outcome = ((int)response.StatusCode).ToString(CultureInfo.InvariantCulture);
         }
-    }).ToList();
+        catch (TaskCanceledException)
+        {
+            outcome = "no answer";
+        }
+        catch (HttpRequestException)
+        {
+            outcome = "refused";
+        }
+        At(started).Record(outcome, timer.Elapsed.TotalMilliseconds);
+    }
+
+    // --rate R sends R transfers a second whether or not earlier ones have been answered, as
+    // real customers do. Without it, --concurrency clients each wait for their answer first.
+    var rate = Arg("--rate", 0);
+    var clients = rate > 0
+        ? [Task.Run(async () =>
+        {
+            var inFlight = new List<Task>();
+            var sent = 0;
+            while (clock.Elapsed.TotalSeconds < seconds)
+            {
+                while (sent < clock.Elapsed.TotalSeconds * rate)
+                {
+                    inFlight.Add(SendOneAsync());
+                    sent++;
+                }
+                await Task.Delay(5);
+            }
+            await Task.WhenAll(inFlight);
+        })]
+        : Enumerable.Range(0, options.Concurrency).Select(async _ =>
+        {
+            while (clock.Elapsed.TotalSeconds < seconds)
+            {
+                await SendOneAsync();
+            }
+        }).ToList();
 
     var bystander = Task.Run(async () =>
     {
@@ -311,7 +343,7 @@ if (args.Contains("--outage"))
     var fraudStats = await fraudHttp.GetFromJsonAsync<FraudStatsBody>("/fraud/stats");
     var fraudBySecond = (fraudStats?.Seconds ?? []).ToDictionary(s => s.Second);
 
-    Console.WriteLine($"{options.Concurrency} clients sending transfers for {seconds}s.");
+    Console.WriteLine(rate > 0 ? $"{rate} transfers a second for {seconds}s." : $"{options.Concurrency} clients sending transfers for {seconds}s.");
     Console.WriteLine("  s | transfers: ok   other  p50 ms | bystander: worst ms  failed | fraud service: calls  refused  failed");
     foreach (var (second, data) in timeline.OrderBy(t => t.Key))
     {

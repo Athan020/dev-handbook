@@ -23,7 +23,8 @@
 //
 //   curl -X POST localhost:5090/fraud/settings -H "Content-Type: application/json" \
 //        -d '{"mode": "hang", "capacity": 50}'
-//   curl -X POST "localhost:5090/fraud/blip?seconds=5"      (down for five seconds, then back)
+//   curl -X POST "localhost:5090/fraud/blip?seconds=5"            (down for five seconds, then back)
+//   curl -X POST "localhost:5090/fraud/blip?seconds=5&kind=slow"  (slow for five seconds)
 //
 // GET /fraud/stats shows, second by second, how many calls arrived and what happened to them.
 using System.Collections.Concurrent;
@@ -195,6 +196,7 @@ var fraud = new FraudSettings();
 var fraudGate = new SemaphoreSlim(int.MaxValue);
 var fraudWaiting = 0;
 DateTimeOffset? fraudDownUntil = null;
+DateTimeOffset? fraudSlowUntil = null;
 var fraudStarted = DateTimeOffset.UtcNow;
 var fraudTimeline = new ConcurrentDictionary<long, FraudSecond>(); // by second since the last reset
 
@@ -220,12 +222,16 @@ app.MapPost("/fraud/decision", async (FraudDecisionRequest request, Cancellation
         Interlocked.Increment(ref second.Refused);
         return Results.StatusCode(503);
     }
+    // Like many real services, by default it finishes work it has started, or queued, even if
+    // the caller has stopped waiting: it can't tell.
+    var work = current.FinishesAbandonedWork ? CancellationToken.None : ct;
     try
     {
-        await fraudGate.WaitAsync(ct);
+        await fraudGate.WaitAsync(work);
         try
         {
-            await Task.Delay(current.Mode == "hang" ? current.HangMs : current.DelayMs, ct);
+            var delay = current.Mode == "hang" ? current.HangMs : fraudSlowUntil > DateTimeOffset.UtcNow ? current.SlowMs : current.DelayMs;
+            await Task.Delay(delay, work);
             if (Random.Shared.NextDouble() < current.FailureRate)
             {
                 Interlocked.Increment(ref Second().Failed);
@@ -252,10 +258,19 @@ app.MapPost("/fraud/settings", (FraudSettings next) =>
     return fraud;
 });
 
-app.MapPost("/fraud/blip", (int seconds) =>
+// A blip: down (fast failures) or slow (each decision takes slowMs) for a few seconds.
+app.MapPost("/fraud/blip", (int seconds, string? kind) =>
 {
-    fraudDownUntil = DateTimeOffset.UtcNow.AddSeconds(seconds);
-    return Results.Ok(new { downUntil = fraudDownUntil });
+    var until = DateTimeOffset.UtcNow.AddSeconds(seconds);
+    if (kind == "slow")
+    {
+        fraudSlowUntil = until;
+    }
+    else
+    {
+        fraudDownUntil = until;
+    }
+    return Results.Ok(new { kind = kind ?? "down", until });
 });
 
 app.MapGet("/fraud/stats", () => new
@@ -269,6 +284,7 @@ app.MapPost("/fraud/reset", () =>
     fraudTimeline.Clear();
     fraudStarted = DateTimeOffset.UtcNow;
     fraudDownUntil = null;
+    fraudSlowUntil = null;
     return Results.Ok();
 });
 // #endregion fraud-decision
@@ -291,7 +307,9 @@ sealed record NetworkSettings(
 sealed record NetworkPaymentRequest(string Reference, decimal Amount, string ToBank, string ToAccount);
 sealed record NetworkPayment(string Reference, decimal Amount, string ToBank, string ToAccount, DateTimeOffset SettledAt);
 
-sealed record FraudSettings(string Mode = "up", int DelayMs = 20, int HangMs = 90_000, double FailureRate = 0, int Capacity = 0, int QueueLimit = 0);
+sealed record FraudSettings(
+    string Mode = "up", int DelayMs = 20, int HangMs = 90_000, int SlowMs = 1_000, double FailureRate = 0,
+    int Capacity = 0, int QueueLimit = 0, bool FinishesAbandonedWork = true);
 sealed record FraudDecisionRequest(int FromAccountId, int ToAccountId, decimal Amount);
 sealed class FraudSecond
 {
