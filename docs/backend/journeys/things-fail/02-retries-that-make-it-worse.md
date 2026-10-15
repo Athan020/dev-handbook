@@ -22,7 +22,7 @@ The next slow spell lasts three seconds again. The outage that follows lasts unt
 
 Because the retries kept the fraud service overloaded. During the slow spell, calls time out, and each one is retried, up to three times: up to four calls for every transfer. The fraud service can't tell that a caller has given up, so it still works through every queued call, including the abandoned ones. When it speeds up again, it's facing four times the normal load plus a backlog, so calls keep timing out, and keep being retried.
 
-In the lab, with the fraud service running at three-quarters of its capacity, a three-second slow spell with no retries caused about ten seconds of failures. With three retries, no transfer succeeded for the remaining 35 seconds of the run, while the fraud service received 600 calls a second for 150 transfers a second. This is a *metastable failure*: the trigger is gone, and the system stays down anyway, held there by its own response.
+In the lab, with the fraud service running at three-quarters of its capacity, a three-second slow spell with no retries caused about eleven seconds of failures. With three retries, no transfer succeeded for the remaining 35 seconds of the run, while the fraud service received 600 calls a second for 150 transfers a second. This is a *metastable failure*: the trigger is gone, and the system stays down anyway, held there by its own response.
 
 :::
 
@@ -36,7 +36,7 @@ Jitter solves a different problem: many clients that failed at the same moment r
 
 ::: think Retries made things worse. Should you remove them?
 
-No. Most failures are isolated: one request lost on the network, one instance restarting. Retrying those is cheap and makes them invisible. In the lab, with one fraud decision in twenty failing at random, no retries meant 85 of 1,600 transfers failed; with retries, none did, at the cost of 81 extra calls. The goal is retries that help with isolated failures, and stop when failures are widespread.
+No. Most failures are isolated: one request lost on the network, one instance restarting. Retrying those is cheap and makes them invisible. In the lab, with one fraud decision in twenty failing at random, no retries meant 98 of 1,600 transfers failed; with retries, none did, at the cost of 60 extra calls. The goal is retries that help with isolated failures, and stop when failures are widespread.
 
 :::
 
@@ -74,15 +74,15 @@ The simulator models the lab: 150 transfers a second, a fraud service with a fix
 
 Retry timeouts, connection errors, 503s and 429s, at most two or three times, only for idempotent operations.
 
-**Fixes:** isolated failures. In the lab, 85 failed transfers out of 1,600 became none.
-**Costs:** a few extra calls (81 in that run) and a little latency for the retried requests.
+**Fixes:** isolated failures. In the lab, 98 failed transfers out of 1,600 became none.
+**Costs:** a few extra calls (60 in that run) and a little latency for the retried requests.
 **Breaks:** under widespread failure, as above: the load multiplies.
 
 ### 2. Back off exponentially
 
 Wait longer before each retry: 200 ms, then 400, then 800.
 
-**Fixes:** calls that fail near the end of a short blip, which succeed on a later attempt. In the lab, with the fraud service down for three seconds and plenty of spare capacity, failed transfers fell from 239 with immediate retries to 126.
+**Fixes:** calls that fail near the end of a short blip, which succeed on a later attempt. In the lab, with the fraud service down for three seconds and plenty of spare capacity, failed transfers fell from 238 with immediate retries to 126.
 **Costs:** latency for retried requests.
 **Breaks:** nothing, but it doesn't reduce the number of retries, so it doesn't prevent a storm.
 
@@ -96,8 +96,8 @@ Randomise each wait, so clients that failed together don't retry together.
 
 ### 4. A retry budget
 
-**Fixes:** retry storms. In the lab's slow spell, the service recovered about 16 seconds after it began, against never with unlimited retries, with 321 retries in total.
-**Costs:** during a widespread failure, requests that a retry might have saved fail instead: 2,503 failures, against 1,497 with no retries at all.
+**Fixes:** retry storms. In the lab's slow spell, the service recovered about 17 seconds after it began, against never with unlimited retries, with 321 retries in total.
+**Costs:** during a widespread failure, requests that a retry might have saved fail instead: 2,542 failures, against 1,584 with no retries at all.
 **Breaks:** nothing. It's the setting that makes retries safe to have.
 
 ### 5. Retry at one layer
@@ -120,11 +120,11 @@ If the dependency can drop a request whose caller has already given up, a storm 
 
 | Retry policy | Isolated failures | Short outage, spare capacity | Slow spell near capacity |
 |---|---|---|---|
-| None | 85 of 1,600 failed | 240 failed | Recovered in ~10 s; 1,497 failed |
-| 3 immediate retries | — | 239 failed; 4× calls during the outage | Never recovered; 5,250 failed |
+| None | 98 of 1,600 failed | 240 failed | Recovered in ~11 s; 1,584 failed |
+| 3 immediate retries | — | 238 failed; 4× calls during the outage | Never recovered; 5,249 failed |
 | 3 retries, exponential backoff | — | 126 failed | Never recovered |
-| 3 retries, backoff and jitter | 0 failed (with a budget) | 173 failed | Never recovered |
-| 3 immediate retries, 10% budget | — | 240 failed | Recovered in ~16 s; 2,503 failed |
+| 3 retries, backoff and jitter | 0 failed (with a budget) | 170 failed | Never recovered |
+| 3 immediate retries, 10% budget | — | 240 failed | Recovered in ~17 s; 2,542 failed |
 
 ## Traps
 
@@ -227,9 +227,9 @@ Our results are in the table above. The slow-spell runs, second by second around
 
 | Policy | Transfers succeeding from 15 s | Calls to the fraud service | Recovered |
 |---|---|---|---|
-| None | 0 a second, until 25 s | 150 a second | At 25 s |
+| None | 0 a second, until 26 s | 150 a second | At 26 s |
 | 3 immediate retries | 0 a second, to the end | About 600 a second, 400 of them refused | Not within 50 s |
-| 10% retry budget | 0 a second, until about 31 s | About 150 a second | At about 31 s |
+| 10% retry budget | 0 a second, until 32 s | About 150 a second | At 32 s |
 
 ## What breaks next
 

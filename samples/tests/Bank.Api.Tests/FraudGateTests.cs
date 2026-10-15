@@ -52,6 +52,29 @@ public sealed class FraudGateTests(BankApiFixture fixture) : IClassFixture<BankA
         Assert.Equal(HttpStatusCode.UnprocessableEntity, (await TransferAsync(client)).StatusCode);
     }
 
+    [Fact]
+    public async Task An_open_breaker_fails_fast_without_calling_the_fraud_service()
+    {
+        var fraud = new StubFraud((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)));
+        await using var api = Api(fraud,
+            ("Lab:FraudGate", "BeforeTransaction"), ("Fraud:Breaker", "true"),
+            ("Fraud:BreakerMinimumThroughput", "5"), ("Fraud:BreakerBreakSeconds", "30"));
+        var client = api.CreateClient();
+
+        for (var i = 0; i < 5; i++)
+        {
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, (await TransferAsync(client)).StatusCode);
+        }
+        var callsWhenOpened = fraud.Calls;
+        for (var i = 0; i < 20; i++)
+        {
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, (await TransferAsync(client)).StatusCode);
+        }
+
+        Assert.Equal(5, callsWhenOpened);
+        Assert.Equal(callsWhenOpened, fraud.Calls); // nothing reached the fraud service while open
+    }
+
     [Theory]
     [InlineData("BeforeTransaction")]
     [InlineData("InTransaction")]

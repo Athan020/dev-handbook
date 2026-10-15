@@ -225,9 +225,10 @@ app.MapPost("/fraud/decision", async (FraudDecisionRequest request, Cancellation
     // Like many real services, by default it finishes work it has started, or queued, even if
     // the caller has stopped waiting: it can't tell.
     var work = current.FinishesAbandonedWork ? CancellationToken.None : ct;
+    var gate = fraudGate; // release the same semaphore this call waited on, even if settings change
     try
     {
-        await fraudGate.WaitAsync(work);
+        await gate.WaitAsync(work);
         try
         {
             var delay = current.Mode == "hang" ? current.HangMs : fraudSlowUntil > DateTimeOffset.UtcNow ? current.SlowMs : current.DelayMs;
@@ -242,7 +243,7 @@ app.MapPost("/fraud/decision", async (FraudDecisionRequest request, Cancellation
         }
         finally
         {
-            fraudGate.Release();
+            gate.Release();
         }
     }
     finally
