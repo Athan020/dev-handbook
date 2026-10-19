@@ -34,6 +34,7 @@ public sealed record PayeeDto(Guid PayeeId, int CustomerAccountId, int PayeeAcco
 public sealed record AccountDto(int AccountId, string HolderName, decimal Balance);
 public sealed record EntryDto(long Position, Guid TransferId, int AccountId, decimal Amount, string Reference, DateTimeOffset PostedAt);
 public sealed record StatementDto(int AccountId, int Year, int Month, decimal MoneyIn, decimal MoneyOut);
+public sealed record BooksDto(int Accounts, decimal TotalBalance, decimal ExpectedTotal, decimal EntriesNet, int AccountsDisagreeing);
 
 public static class ModularClient
 {

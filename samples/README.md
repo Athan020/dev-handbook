@@ -97,6 +97,9 @@ B5's labs use a modular version of the bank, `src/Bank.Modular` (on http://local
 | `POST /transfers` | Pays a saved payee, e.g. `{"fromAccountId": 1, "payeeId": "…", "amount": 25.50}` (ledger, asking payees) |
 | `GET /accounts/{id}/statements/{year}/{month}` | A monthly statement (statements, asking the ledger) |
 | `GET /ledger/feed?after=0&max=500` | Every ledger entry in the order posted, after a position |
+| `GET /ledger/check` | Whether the books add up: the total against the opening balances, and how many accounts disagree with their own entries |
+
+For stage 2, `--Lab:EntityServices=true` adds the ledger split by table, as an Account service and a Transaction service would offer it (`GET /entity/accounts/{id}`, `PUT /entity/accounts/{id}/balance`, `POST /entity/entries`). `dotnet run --project tools/Bank.Load -- --split entity|capability --seconds 20` sends transfers through it or through `POST /transfers`, and checks the books before and after; `--crash-rate 0.01` makes the caller stop after the debit in that share of entity-split transfers. `dotnet run --project tools/Bank.Load -- --co-change src/Bank.Api` lists the files that most often change in the same commit. To start the books again, stop the app and run `docker compose exec postgres psql -U bank -d bank -c "DROP SCHEMA ledger CASCADE"`; the module recreates and reseeds its schema on the next start.
 
 ## Tests
 

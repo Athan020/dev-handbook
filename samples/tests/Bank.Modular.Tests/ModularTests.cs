@@ -74,6 +74,23 @@ public class ModularTests(ModularFixture fixture) : IClassFixture<ModularFixture
         Assert.True(payeeStatement!.MoneyIn >= 7m);
     }
 
+    [Fact]
+    public async Task The_books_balance_after_transfers_through_the_ledger()
+    {
+        using var http = fixture.App.CreateClient();
+        foreach (var account in new[] { 3, 4, 5 })
+        {
+            var payee = await http.FirstPayeeAsync(account);
+            await http.PayAsync(account, payee.PayeeId, 5m);
+        }
+
+        var books = await http.GetFromJsonAsync<BooksDto>("/ledger/check", Ct);
+
+        Assert.Equal(books!.ExpectedTotal, books.TotalBalance);
+        Assert.Equal(0m, books.EntriesNet);
+        Assert.Equal(0, books.AccountsDisagreeing);
+    }
+
     // #region feed-gap-test
     [Fact]
     public async Task The_feed_waits_for_an_entry_that_is_still_being_committed()

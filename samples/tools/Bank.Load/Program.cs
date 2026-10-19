@@ -26,12 +26,20 @@
 //
 // --noisy sends customers' transfers alongside one partner flooding the API (B4 stage 6).
 //
+// --split entity|capability compares a ledger split by table with one split by capability (B5 stage 2).
+//
+// --co-change <path> lists the files under <path> that most often change in the same commit (B5 stage 2).
+//
 // --race N runs rounds of a race (B3 stage 1): open an account, deposit --deposit (default 100),
 // then send N transfers of --amount (default 60) from it, all at once. It reports how the API
 // answered, and in how many of --rounds rounds (default 50) the account ended up overdrawn.
 using System.Diagnostics;
 using System.Globalization;
 using System.Net.Http.Json;
+
+// Journey B5's modes, against the modular monolith on port 5100.
+if (args.Contains("--split")) { await ModularLabs.SplitAsync(args); return; }
+if (args.Contains("--co-change")) { ModularLabs.CoChange(args); return; }
 
 var options = Options.Parse(args);
 using var http = new HttpClient { BaseAddress = new Uri(options.Url), Timeout = TimeSpan.FromSeconds(30) };

@@ -57,6 +57,11 @@ public static class LedgerModule
         app.MapGet("/accounts/{accountId:int}/entries", async (int accountId, DateTimeOffset from, DateTimeOffset to, ILedger ledger, CancellationToken ct) =>
             Results.Ok(await ledger.EntriesAsync(accountId, from, to, ct)));
 
+        app.MapGet("/ledger/check", async (LedgerDb db, CancellationToken ct) => Results.Ok(await EntityEndpoints.CheckAsync(db, ct)));
+
+        if (app.ServiceProvider.GetRequiredService<IConfiguration>().GetValue("Lab:EntityServices", false))
+            EntityEndpoints.Map(app);
+
         app.MapGet("/ledger/feed", async (long after, int? max, ILedger ledger, CancellationToken ct) =>
             Results.Ok(await ledger.ReadFeedAsync(after, Math.Clamp(max ?? 500, 1, 5000), ct)));
 
@@ -79,13 +84,16 @@ public static class LedgerModule
             await db.Database.ExecuteSqlRawAsync(db.Database.GenerateCreateScript(), ct);
             await db.Database.ExecuteSqlAsync($"""
                 INSERT INTO ledger.accounts (account_id, holder_name, balance)
-                SELECT g, 'Customer ' || g, 10000 FROM generate_series(1, {seed.Accounts}) AS g
+                SELECT g, 'Customer ' || g, {LedgerSeed.OpeningBalance} FROM generate_series(1, {seed.Accounts}) AS g
                 """, ct);
         }
         await transaction.CommitAsync(ct);
     }
 }
 
-internal sealed record LedgerSeed(int Accounts);
+internal sealed record LedgerSeed(int Accounts)
+{
+    public const decimal OpeningBalance = 10_000m;
+}
 
 internal sealed record PayRequest(int FromAccountId, Guid PayeeId, decimal Amount, string? Reference);
