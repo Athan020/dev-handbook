@@ -330,3 +330,32 @@ test.describe('retry storm simulator', () => {
     await expect(sim.locator('.tooltip')).toContainText('calls reached the fraud service')
   })
 })
+
+test.describe('rate limiter visualiser', () => {
+  const url = '/backend/journeys/things-fail/06-rate-limiting'
+
+  async function scenario(page: Page, name: string) {
+    await page.goto(url)
+    const sim = page.locator('.rate-limiter')
+    await sim.locator(`[data-scenario="${name}"]`).click()
+    return sim
+  }
+  const cell = (sim: Locator, algorithm: string, col: string) =>
+    sim.locator(`[data-algorithm="${algorithm}"] [data-col="${col}"]`)
+
+  test('bursts either side of a window edge get twice the limit through a fixed window', async ({ page }) => {
+    const sim = await scenario(page, 'boundary')
+    await expect(cell(sim, 'fixed', 'busiest')).toHaveText('20')
+    await expect(cell(sim, 'sliding', 'busiest')).toHaveText('10')
+    await expect(cell(sim, 'bucket', 'busiest')).toHaveText('10')
+  })
+
+  test('a single burst is cut to the limit, or to the bucket size', async ({ page }) => {
+    const sim = await scenario(page, 'burst')
+    await expect(cell(sim, 'fixed', 'accepted')).toHaveText('10')
+    await expect(cell(sim, 'sliding', 'accepted')).toHaveText('10')
+    await sim.getByLabel('Token bucket size').fill('30')
+    await expect(cell(sim, 'bucket', 'accepted')).toHaveText('30')
+    await expect(cell(sim, 'fixed', 'accepted')).toHaveText('10')
+  })
+})

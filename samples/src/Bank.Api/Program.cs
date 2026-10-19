@@ -36,6 +36,7 @@ builder.Services.AddHostedService<PendingPaymentResolver>();
 // Journey B4: the fraud gate on transfers, and an optional deadline for every request.
 builder.Services.AddFraudGate(builder.Configuration);
 builder.Services.AddHostedService<HeldTransferReleaser>();
+builder.Services.AddLabRateLimiting(builder.Configuration);
 
 // #region shared-pool
 // B4 stage 4: Lab:SharedOutboundPool sends email and fraud calls through one connection pool
@@ -122,6 +123,9 @@ if (requestTimeoutMs > 0)
     app.UseRequestTimeouts();
 }
 // #endregion request-deadline
+
+// B4 stage 6: rate limits on callers, if Lab:RateLimit asks for them.
+app.UseLabRateLimiting();
 
 app.MapGet("/health", () => Results.Ok("healthy"));
 app.MapGet("/resilience/fraud", (FraudStats stats) => stats.Snapshot());

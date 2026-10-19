@@ -8,6 +8,7 @@ import InterleavingSimulator from './components/InterleavingSimulator.vue'
 import MermaidDiagram from './components/MermaidDiagram.vue'
 import OutboxSimulator from './components/OutboxSimulator.vue'
 import PoolSimulator from './components/PoolSimulator.vue'
+import RateLimiterVisualiser from './components/RateLimiterVisualiser.vue'
 import ReplicaSimulator from './components/ReplicaSimulator.vue'
 import RetryStormSimulator from './components/RetryStormSimulator.vue'
 import SqlPlayground from './components/SqlPlayground.vue'
@@ -29,5 +30,6 @@ export default {
     app.component('BacklogSimulator', BacklogSimulator)
     app.component('InterleavingSimulator', InterleavingSimulator)
     app.component('RetryStormSimulator', RetryStormSimulator)
+    app.component('RateLimiterVisualiser', RateLimiterVisualiser)
   },
 } satisfies Theme

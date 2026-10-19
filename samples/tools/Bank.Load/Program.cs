@@ -24,6 +24,8 @@
 //
 // --outage runs transfers through a fraud-service outage and prints a timeline (B4).
 //
+// --noisy sends customers' transfers alongside one partner flooding the API (B4 stage 6).
+//
 // --race N runs rounds of a race (B3 stage 1): open an account, deposit --deposit (default 100),
 // then send N transfers of --amount (default 60) from it, all at once. It reports how the API
 // answered, and in how many of --rounds rounds (default 50) the account ended up overdrawn.
@@ -356,6 +358,85 @@ if (args.Contains("--outage"))
     return;
 }
 
+// --noisy (B4 stage 6): customers send --rate transfers a second (default 80), each with their own
+// X-Client-Id, while one partner sends --partner-rate a second (default 1000) for --seconds
+// (default 30). --targets lists API instances to spread the requests across.
+if (args.Contains("--noisy"))
+{
+    var seconds = Arg("--seconds", 30);
+    var customerRate = Arg("--rate", 80);
+    var partnerRate = Arg("--partner-rate", 1000);
+    var targets = (Array.IndexOf(args, "--targets") is var t and >= 0 ? args[t + 1] : options.Url)
+        .Split(',').Select(url => new HttpClient { BaseAddress = new Uri(url), Timeout = TimeSpan.FromSeconds(30) }).ToArray();
+    var results = new System.Collections.Concurrent.ConcurrentDictionary<string, OutageSecond>();
+    var clock = Stopwatch.StartNew();
+    var sent = 0;
+
+    async Task SendAsync(string group, string clientId)
+    {
+        var target = targets[Interlocked.Increment(ref sent) % targets.Length];
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/transfers") { Content = JsonContent.Create(options.NextTransfer()) };
+        request.Headers.Add("X-Client-Id", clientId);
+        var timer = Stopwatch.StartNew();
+        string outcome;
+        try
+        {
+            using var response = await target.SendAsync(request);
+            outcome = ((int)response.StatusCode).ToString(CultureInfo.InvariantCulture);
+        }
+        catch (Exception e) when (e is TaskCanceledException or HttpRequestException)
+        {
+            outcome = "no answer";
+        }
+        results.GetOrAdd(group, _ => new OutageSecond()).Record(outcome, timer.Elapsed.TotalMilliseconds);
+    }
+
+    // Like a real client, give up rather than queue without limit: at most 2,000 requests per
+    // group waiting for an answer; past that, a request isn't sent and counts as "not sent".
+    var waiting = new System.Collections.Concurrent.ConcurrentDictionary<string, int>();
+    async Task RunAsync(string group, int rate, Func<int, string> clientOf)
+    {
+        var inFlight = new List<Task>();
+        var n = 0;
+        while (clock.Elapsed.TotalSeconds < seconds)
+        {
+            while (n < clock.Elapsed.TotalSeconds * rate)
+            {
+                if (waiting.GetOrAdd(group, 0) >= 2_000)
+                {
+                    results.GetOrAdd(group, _ => new OutageSecond()).Record("not sent", 0);
+                }
+                else
+                {
+                    waiting.AddOrUpdate(group, 1, (_, w) => w + 1);
+                    var client = clientOf(n);
+                    inFlight.Add(Task.Run(async () =>
+                    {
+                        try { await SendAsync(group, client); }
+                        finally { waiting.AddOrUpdate(group, 0, (_, w) => w - 1); }
+                    }));
+                }
+                n++;
+            }
+            await Task.Delay(5);
+        }
+        await Task.WhenAll(inFlight);
+    }
+
+    await Task.WhenAll(
+        RunAsync("customers", customerRate, i => $"customer-{i % 500}"),
+        partnerRate > 0 ? RunAsync("partner", partnerRate, _ => "partner") : Task.CompletedTask);
+
+    Console.WriteLine($"{seconds}s: customers at {customerRate}/s, one partner at {partnerRate}/s, across {targets.Length} API instance(s).");
+    foreach (var (group, data) in results.OrderBy(r => r.Key))
+    {
+        var total = data.Outcomes.Values.Sum();
+        Console.WriteLine($"  {group,-9}: {data.Ok} of {total} succeeded ({100.0 * data.Ok / total:F1}%), {data.Ok / (double)seconds:F0}/s; " +
+            $"other: {string.Join(", ", data.Outcomes.Where(o => o.Key != "201").Select(o => $"{o.Key} x {o.Value}"))}; p50 {data.P50:F0} ms, p99 {data.P99:F0} ms");
+    }
+    return;
+}
+
 // --crossfire N (B3 stage 2): two accounts paying each other, A to B and B to A, N transfers in all.
 if (Array.IndexOf(args, "--crossfire") is var crossAt and >= 0)
 {
@@ -492,6 +573,7 @@ sealed class OutageSecond
     public int Ok => Outcomes.GetValueOrDefault("201");
     public int Other => Outcomes.Where(o => o.Key != "201").Sum(o => o.Value);
     public double P50 { get { lock (_gate) { return _latencies.Count == 0 ? 0 : _latencies.Order().ElementAt(_latencies.Count / 2); } } }
+    public double P99 { get { lock (_gate) { return _latencies.Count == 0 ? 0 : _latencies.Order().ElementAt(Math.Min(_latencies.Count - 1, (int)(_latencies.Count * 0.99))); } } }
     public double BystanderWorst { get; private set; }
     public int BystanderFailed { get; private set; }
 

@@ -49,6 +49,19 @@ services:
       timeout: 5s
       retries: 30
 
+  # Redis, for B4 stage 6's rate limit shared by several API instances. Only starts with the profile:
+  #   docker compose --profile redis up -d
+  redis:
+    image: redis:8.6.7-alpine
+    profiles: [redis]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
   # A streaming-replication read replica (B1 stage 6). It only starts with the profile:
   #   docker compose --profile replica up -d
   # Set REPLICA_DELAY (milliseconds) to hold back applying changes, e.g.
