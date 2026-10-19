@@ -145,6 +145,77 @@ static class ModularLabs
     }
     // #endregion co-change
 
+    // --staleness (B5 stage 3): sends --count transfers (default 200), --rate a second (default
+    // 10), through --url. After each, polls the payer's statement at --statements-url (default
+    // the same) until the transfer is on it, and reports how long that took.
+    public static async Task StalenessAsync(string[] args)
+    {
+        CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+        var count = Int(args, "--count", 200);
+        var rate = Int(args, "--rate", 10);
+        var accounts = Int(args, "--accounts", 1000);
+        using var http = new HttpClient { BaseAddress = new Uri(Get(args, "--url", "http://localhost:5100")), Timeout = TimeSpan.FromSeconds(10) };
+        using var statements = new HttpClient { BaseAddress = new Uri(Get(args, "--statements-url", Get(args, "--url", "http://localhost:5100"))), Timeout = TimeSpan.FromSeconds(10) };
+        var lags = new ConcurrentBag<double>();
+        var outcomes = new ConcurrentDictionary<string, int>();
+
+        async Task OneAsync()
+        {
+            var from = Random.Shared.Next(1, accounts + 1);
+            var payee = (await http.GetFromJsonAsync<PayeeRef[]>($"/accounts/{from}/payees"))![0];
+            using var sent = await http.PostAsJsonAsync("/transfers", new { fromAccountId = from, payeeId = payee.PayeeId, amount = 1m });
+            if (sent.StatusCode != HttpStatusCode.Created)
+            {
+                outcomes.AddOrUpdate($"transfer {(int)sent.StatusCode}", 1, (_, n) => n + 1);
+                return;
+            }
+            var transferId = (await sent.Content.ReadFromJsonAsync<Created>())!.TransferId;
+            var now = DateTimeOffset.UtcNow;
+            var timer = Stopwatch.StartNew();
+            while (timer.Elapsed < TimeSpan.FromSeconds(10))
+            {
+                try
+                {
+                    var statement = await statements.GetFromJsonAsync<StatementLines>($"/accounts/{from}/statements/{now.Year}/{now.Month}");
+                    if (statement!.Lines.Any(l => l.TransferId == transferId))
+                    {
+                        lags.Add(timer.Elapsed.TotalMilliseconds);
+                        outcomes.AddOrUpdate("on the statement", 1, (_, n) => n + 1);
+                        return;
+                    }
+                }
+                catch (HttpRequestException e)
+                {
+                    outcomes.AddOrUpdate($"statement {(int?)e.StatusCode ?? 0}", 1, (_, n) => n + 1);
+                    return;
+                }
+                await Task.Delay(20);
+            }
+            outcomes.AddOrUpdate("not on the statement after 10 s", 1, (_, n) => n + 1);
+        }
+
+        var all = new List<Task>();
+        var clock = Stopwatch.StartNew();
+        for (var i = 0; i < count; i++)
+        {
+            var due = TimeSpan.FromSeconds(i / (double)rate);
+            if (due > clock.Elapsed) await Task.Delay(due - clock.Elapsed);
+            all.Add(OneAsync());
+        }
+        await Task.WhenAll(all);
+
+        var sorted = lags.Order().ToArray();
+        Console.WriteLine($"{count} transfers at {rate}/s: {string.Join(", ", outcomes.Select(o => $"{o.Key} x {o.Value}"))}");
+        if (sorted.Length > 0)
+            Console.WriteLine($"  on the payer's statement after: p50 {sorted[sorted.Length / 2]:F0} ms, p99 {sorted[(int)(sorted.Length * 0.99)]:F0} ms, max {sorted[^1]:F0} ms");
+    }
+
+    sealed record Created(Guid TransferId);
+
+    sealed record StatementLines(List<StatementLine> Lines);
+
+    sealed record StatementLine(Guid TransferId);
+
     static string Describe(Books books)
     {
         var missing = books.ExpectedTotal - books.TotalBalance;

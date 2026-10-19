@@ -67,6 +67,7 @@ public class ModuleBoundaryTests
         // Guards the schema test: if it found no DbContext, it would pass without checking anything.
         Assert.NotEmpty(DbContextsIn(typeof(LedgerModule).Assembly));
         Assert.NotEmpty(DbContextsIn(typeof(PayeesModule).Assembly));
+        Assert.NotEmpty(DbContextsIn(typeof(StatementsModule).Assembly));
     }
 
     /// <summary>Builds each of an assembly's DbContexts, without a database, to read its model.</summary>
