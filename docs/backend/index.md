@@ -24,10 +24,10 @@ The bar is everything around that core which senior work and senior interviews p
 | [B2: Work that shouldn't happen in the request](./journeys/work-outside-the-request/) | Slow, unreliable work inside the request | Design a multi-channel notification system |
 | [B3: The money must add up](./journeys/the-money-must-add-up/) | Concurrency, retries and audits threaten correctness | Design a transfer between accounts |
 | [B4: Things fail](./journeys/things-fail/) | Dependencies are slow, wrong or down; callers misbehave | Design a rate limiter |
+| [B5: One service becomes many](./journeys/one-service-becomes-many/) | One codebase, many teams; splitting it without breaking it | Move payees out of the monolith |
 
 ### Coming later
 
-- **B5: One service becomes many.** Modular monolith first, bounded contexts, data ownership, sync vs async between services, sagas, API gateways, strangler-fig migration.
 - **B6: Shipping it safely.** Pipelines, environments, infrastructure as code, zero-downtime database migrations, deployment strategies, feature flags, rollbacks.
 - **B7: Where your code actually runs.** The request path from client to process, connection reuse, CPU, memory and thread-pool limits, containers vs VMs vs serverless, scaling.
 - **B8: Something is wrong in production.** What to instrument, SLOs and alerts, a troubleshooting method, diagnosing performance degradation, defect triage, incidents and postmortems.

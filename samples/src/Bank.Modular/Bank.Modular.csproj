@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!--
+    B5: the modular monolith. One process, one deployment, but each module keeps its code
+    and its data to itself. The host is the only project that references every module.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="../Bank.Modular.Contracts/Bank.Modular.Contracts.csproj" />
+    <ProjectReference Include="../Bank.Modular.Ledger/Bank.Modular.Ledger.csproj" />
+    <ProjectReference Include="../Bank.Modular.Payees/Bank.Modular.Payees.csproj" />
+    <ProjectReference Include="../Bank.Modular.Statements/Bank.Modular.Statements.csproj" />
+  </ItemGroup>
+</Project>

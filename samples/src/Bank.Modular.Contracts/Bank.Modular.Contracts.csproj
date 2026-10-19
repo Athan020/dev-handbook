@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    B5: what each module promises the others. Modules reference this project and nothing else
+    of each other's, so the compiler refuses any reach into another module's internals.
+  -->
+</Project>

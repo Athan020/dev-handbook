@@ -69,6 +69,19 @@ const backendJourneys: { slug: string; text: string; stages: [string, string][] 
       ['07-prove-it-works', '7. Prove it works before you need it'],
     ],
   },
+  {
+    slug: 'one-service-becomes-many',
+    text: 'B5: One service becomes many',
+    stages: [
+      ['01-split-it-or-not-yet', '1. Split it, or not yet?'],
+      ['02-where-the-boundaries-go', '2. Where the boundaries go'],
+      ['03-who-owns-the-data', '3. Who owns the data'],
+      ['04-sync-or-async', '4. Sync or async between services'],
+      ['05-sagas', '5. A transaction across services'],
+      ['06-one-front-door', '6. One front door'],
+      ['07-strangler-fig', '7. Moving a capability without stopping'],
+    ],
+  },
 ]
 
 const backendSidebar: DefaultTheme.SidebarItem[] = [

@@ -13,6 +13,7 @@ A VitePress site for building T-shaped software engineering skills, organised by
 - `npm run check:journeys`: check every written journey page against `docs/_templates` (sections, stop-and-think blocks, a trap, interview follow-ups, stage numbers, "What breaks next" links).
 - `docker compose up -d` (in `samples/`): start Postgres and, from Phase 2, RabbitMQ for the labs. Add `--profile replica` for the read replica (B1 stage 6). For B2, also run `dotnet run --project samples/tools/Bank.FakeServices` and `dotnet run --project samples/src/Bank.Worker`.
 - `dotnet run --project samples/src/Bank.Api -- seed`: create the schema and seed 10M transactions (one to three minutes; `docker compose down -v` to start over)
+- `dotnet run --project samples/src/Bank.Modular`: B5's modular monolith on port 5100. It creates and seeds its own schemas (`ledger`, `payees`, ...) in the lab database on first start.
 - `dotnet build samples/Samples.sln` and `dotnet test --solution samples/Samples.sln`: compile and test the samples (the tests need Docker running)
 - `dotnet run --project samples/src/Bank.Api -- schema`: regenerate `Data/Seed/schema.sql` (the SQL playground's schema) after changing the model; a test fails if it's stale
 - `dotnet test --solution samples/assessments/Assessments.sln -p:UseReference=true`: test the assessment practice sets' worked solutions (without the flag, the tests run against the empty starting points in `Problems/` and fail, as they should). The SQL set needs Docker.

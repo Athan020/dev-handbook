@@ -3,7 +3,7 @@
 > A VitePress site for building **T-shaped** software engineering skills, organised by orientation (frontend or backend). It is meant to help engineers grow in their current role and prepare for multi-round interviews. It teaches judgement: creative problem solving that still respects good practice.
 
 **Plan version:** v2 (journey-based). Supersedes v1, which was topic-based and migration-first. See §9.
-**Status:** Phase 4 in progress (started 2026-10-12): B4 written (approved 2026-10-15), awaiting review. B3 complete and approved (2026-10-15). Phase 3 complete and approved (2026-10-12).
+**Status:** Phase 4 in progress (started 2026-10-12): writing B5 (approved 2026-10-19). B4 complete and approved (2026-10-19). B3 complete and approved (2026-10-15). Phase 3 complete and approved (2026-10-12).
 **Owner:** Athan
 **Source material:** `_source/backend-engineer-kb/` is a **quarry, not a blueprint**. See §6.
 
@@ -144,7 +144,18 @@ docs/
 | 7 | Prove it works before you need it: fault injection, testing timeouts and breakers, game days, alerting on breaker state | "The breaker was configured, but it had never opened, and in the next outage it didn't either" |
 | ★ | Capstone: "Design a rate limiter" | — |
 
-**B5 — One service becomes many** *(Phase 4)*: modular monolith first, boundaries (bounded contexts), data ownership, sync vs async between services, sagas, API gateways, strangler-fig migration. Capstone: *migrate a capability out of a monolith*.
+**B5 — One service becomes many** *(Phase 4, approved 2026-10-19)*
+
+| # | Stage | Triggered by |
+|---|---|---|
+| 1 | Split it, or not yet? What microservices buy and cost; kinds of coupling (code, data, deployment, runtime); the modular monolith first, with boundaries enforced by tests | "Three teams share one codebase. A change to statements broke transfers, and every release waits for everyone" |
+| 2 | Where the boundaries go: bounded contexts and their language, splitting by capability rather than by table (entity services), finding seams in what changes together | "The first split went by table: an Account service and a Transaction service, and every transfer now calls both, three times" |
+| 3 | Who owns the data: one owner, no shared tables; reading another service's data by API call, local copy from events, or a reporting store; staleness | "Notifications read the accounts table directly, and a column rename broke them in production" |
+| 4 | Sync or async between services: request/response, events and commands; temporal coupling; availability and latency multiply along a chain; when sync is right | "A transfer calls customers, limits, accounts and fraud in turn; each is 99.9% available, and transfers are noticeably less" |
+| 5 | A transaction across services: sagas; why not two-phase commit; orchestration vs choreography; compensations as business actions; durable saga state, idempotent steps, pending states | "A card top-up debited the ledger, the cards service failed, and nothing undid it" |
+| 6 | One front door: API gateways (routing, authentication at the edge, rate limits), aggregation, backends for frontends; keeping business logic out of the gateway | "The mobile app calls six services, each checks the token, and one screen takes six round trips" |
+| 7 | Moving a capability without stopping: the strangler fig; routing facade; dual writes vs change data capture vs events; backfill, parallel run and shadow comparison, gradual traffic shift, a way back, retiring the old code | "The plan is to rewrite payments and switch over in one weekend" |
+| ★ | Capstone: "Move payees out of the monolith into their own service, with no downtime and no lost or duplicated payees" | — |
 
 **B6 — Shipping it safely** *(Phase 4)*: triggered by "a deploy took the site down for 20 minutes". A pipeline you can trust (build, test, artifacts), environments and configuration, infrastructure as code (drift, review), database migrations without downtime (expand, then contract), deployment strategies (rolling, blue-green, canary), feature flags, rollbacks. Capstone: *ship a breaking schema change to the transfer API with zero downtime*.
 
@@ -225,6 +236,7 @@ Do not carry these over as correct. Use them as "spot the bug" material where th
 | `02-system-design/idempotency.md` — `PaymentService` | Debits and credits across services with no transaction or compensation, and stores the idempotency result in a cache separately from the database write. | B3 |
 | `05-databases/sql-fundamentals.md` — isolation levels | Runs `SET TRANSACTION ISOLATION LEVEL SERIALIZABLE` before `BEGIN`, which Postgres ignores with a warning, so the "critical" work runs at read committed. Its anomaly table omits lost updates and write skew. | B3 stage 1 |
 | `09-system-design-prep/02-rate-limiter.md` — `RateLimiterService` | Labelled "Token Bucket", but the Lua script is a fixed-window counter (`INCR` and `EXPIRE`), which lets a client send twice its limit around a window boundary. | B4 capstone |
+| `03-architecture/microservices.md` — `CreateOrderSaga` | Does not compile (`_logger` is never declared), and keeps its compensations in an in-memory stack, so a crash mid-saga leaves a payment taken with nothing to undo it. Compensation failures are logged and dropped. | B5 stage 5 |
 | `01-fundamentals/cap-theorem.md` | Presents CAP as "pick two" categories per product, and mislabels PACELC examples: Cassandra and DynamoDB default to latency over consistency when there's no partition (PA/EL), not PA/EC. | Phase 6 consistency reference |
 
 ## 9. Changes from v1

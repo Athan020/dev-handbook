@@ -86,6 +86,18 @@ B4 adds a fraud decision before every transfer. The fake services' fraud service
 - **Seeing the SQL.** Add `--Logging:LogLevel:Microsoft.EntityFrameworkCore.Database.Command=Information` to log every query EF runs, with its duration.
 - **Query statistics.** Postgres records every query's call count and time in `pg_stat_statements`. Enable it once with `docker compose exec postgres psql -U bank -d bank -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements"`.
 
+## Journey B5: one service becomes many
+
+B5's labs use a modular version of the bank, `src/Bank.Modular` (on http://localhost:5100), in the same Postgres database as the API but in schemas of its own. It has three modules, each a project of its own: the ledger (accounts, balances, transfers and the entries they post), payees, and statements. Modules reference only `src/Bank.Modular.Contracts`, so the compiler stops one using another's internals, and `tests/Bank.Modular.Tests` checks the rest: that no module references another, makes anything public beyond the class that switches it on, or maps a table outside its own schema. On first start, each module creates its tables and seeds itself: 1,000 accounts with R10,000 each (`--Modular:SeedAccounts` to change it), and three payees per account.
+
+| Endpoint | What it does |
+|---|---|
+| `GET /accounts/{id}` | An account and its balance (ledger) |
+| `GET /accounts/{id}/payees`, `POST /accounts/{id}/payees`, `DELETE /accounts/{id}/payees/{payeeId}` | A customer's saved payees (payees), e.g. `{"payeeAccountId": 7, "name": "Landlord", "reference": "Rent"}` |
+| `POST /transfers` | Pays a saved payee, e.g. `{"fromAccountId": 1, "payeeId": "…", "amount": 25.50}` (ledger, asking payees) |
+| `GET /accounts/{id}/statements/{year}/{month}` | A monthly statement (statements, asking the ledger) |
+| `GET /ledger/feed?after=0&max=500` | Every ledger entry in the order posted, after a position |
+
 ## Tests
 
 ```sh
