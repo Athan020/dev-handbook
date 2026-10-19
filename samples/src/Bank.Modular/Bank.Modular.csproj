@@ -4,6 +4,12 @@
     and its data to itself. The host is the only project that references every module.
   -->
   <ItemGroup>
+    <!-- For `dotnet ef migrations add`: each module's migrations live in the module's project. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../Bank.Modular.Contracts/Bank.Modular.Contracts.csproj" />
     <ProjectReference Include="../Bank.Modular.Ledger/Bank.Modular.Ledger.csproj" />
     <ProjectReference Include="../Bank.Modular.Payees/Bank.Modular.Payees.csproj" />

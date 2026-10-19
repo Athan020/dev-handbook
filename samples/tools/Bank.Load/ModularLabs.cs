@@ -216,6 +216,119 @@ static class ModularLabs
 
     sealed record StatementLine(Guid TransferId);
 
+    // --chain (B5 stage 4): sends transfers at --rate a second (default 20) for --seconds
+    // (default 60) through --url, whether or not earlier ones have been answered, and reports how
+    // many were made and how fast. Accepted transfers (202) are followed until they're made or
+    // rejected. --blip fraud --blip-at 20 --blip-seconds 10 takes one of the fake services'
+    // checks (at --fake-url) down for a while. --payees-url if payees run elsewhere.
+    public static async Task ChainAsync(string[] args)
+    {
+        CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+        var seconds = Int(args, "--seconds", 60);
+        var rate = Int(args, "--rate", 20);
+        var accounts = Int(args, "--accounts", 1000);
+        var blip = Get(args, "--blip", "");
+        var blipAt = Int(args, "--blip-at", 20);
+        var blipSeconds = Int(args, "--blip-seconds", 10);
+        using var http = new HttpClient { BaseAddress = new Uri(Get(args, "--url", "http://localhost:5100")), Timeout = TimeSpan.FromSeconds(30) };
+        using var fake = new HttpClient { BaseAddress = new Uri(Get(args, "--fake-url", "http://localhost:5090")) };
+        using var payeesHttp = new HttpClient { BaseAddress = new Uri(Get(args, "--payees-url", Get(args, "--url", "http://localhost:5100"))) };
+        (await fake.PostAsync("/checks/reset", null)).EnsureSuccessStatusCode();
+
+        var payees = new ConcurrentDictionary<int, PayeeRef[]>();
+        for (var account = 1; account <= accounts; account += 100)
+        {
+            // Warm up: look up some payees, and make a few transfers, before measuring.
+            payees[account] = (await payeesHttp.GetFromJsonAsync<PayeeRef[]>($"/accounts/{account}/payees"))!;
+            using var _ = await http.PostAsJsonAsync("/transfers", new { fromAccountId = account, payeeId = payees[account][0].PayeeId, amount = 0.01m });
+        }
+
+        var responses = new ConcurrentDictionary<string, int>();
+        var latencies = new ConcurrentBag<double>();
+        var madeAfter = new ConcurrentBag<double>();
+        var final = new ConcurrentDictionary<string, int>();
+        var duringBlip = new ConcurrentDictionary<string, int>();
+        var clock = Stopwatch.StartNew();
+
+        async Task OneAsync(int i)
+        {
+            var from = Random.Shared.Next(1, accounts + 1);
+            if (!payees.TryGetValue(from, out var options))
+                payees[from] = options = (await payeesHttp.GetFromJsonAsync<PayeeRef[]>($"/accounts/{from}/payees"))!;
+            var sentAt = clock.Elapsed;
+            var inBlip = blip != "" && sentAt.TotalSeconds >= blipAt && sentAt.TotalSeconds < blipAt + blipSeconds;
+            var timer = Stopwatch.StartNew();
+            string outcome;
+            Guid? accepted = null;
+            try
+            {
+                using var response = await http.PostAsJsonAsync("/transfers", new { fromAccountId = from, payeeId = options[Random.Shared.Next(options.Length)].PayeeId, amount = 1m });
+                outcome = ((int)response.StatusCode).ToString(CultureInfo.InvariantCulture);
+                if (response.StatusCode == HttpStatusCode.Accepted) accepted = (await response.Content.ReadFromJsonAsync<Created>())!.TransferId;
+            }
+            catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+            {
+                outcome = "no answer";
+            }
+            latencies.Add(timer.Elapsed.TotalMilliseconds);
+            responses.AddOrUpdate(outcome, 1, (_, n) => n + 1);
+
+            var result = outcome == "201" ? "made" : "not made";
+            if (accepted is { } id)
+            {
+                result = "still pending after 120 s";
+                while (timer.Elapsed < TimeSpan.FromSeconds(120))
+                {
+                    await Task.Delay(500);
+                    RequestStatus? status;
+                    try { status = await http.GetFromJsonAsync<RequestStatus>($"/transfers/{id}"); }
+                    catch (Exception e) when (e is HttpRequestException or TaskCanceledException) { continue; }
+                    if (status!.Status == "Pending") continue;
+                    result = status.Status == "Completed" ? "made" : $"rejected: {status.Reason}";
+                    if (result == "made") madeAfter.Add(timer.Elapsed.TotalMilliseconds);
+                    break;
+                }
+            }
+            final.AddOrUpdate(result, 1, (_, n) => n + 1);
+            if (inBlip) duringBlip.AddOrUpdate(result, 1, (_, n) => n + 1);
+        }
+
+        var all = new List<Task>();
+        var blipped = false;
+        for (var i = 0; i < seconds * rate; i++)
+        {
+            var due = TimeSpan.FromSeconds(i / (double)rate);
+            if (due > clock.Elapsed) await Task.Delay(due - clock.Elapsed);
+            if (blip != "" && !blipped && clock.Elapsed.TotalSeconds >= blipAt)
+            {
+                (await fake.PostAsync($"/checks/{blip}/blip?seconds={blipSeconds}", null)).EnsureSuccessStatusCode();
+                blipped = true;
+            }
+            all.Add(OneAsync(i));
+        }
+        await Task.WhenAll(all);
+
+        static double At(double[] sorted, double p) => sorted.Length == 0 ? 0 : sorted[Math.Min(sorted.Length - 1, (int)(sorted.Length * p))];
+        var lat = latencies.Order().ToArray();
+        var made = final.GetValueOrDefault("made");
+        var total = seconds * rate;
+        Console.WriteLine($"{seconds} s at {rate}/s: {total:N0} transfers");
+        Console.WriteLine($"  responses: {string.Join(", ", responses.OrderByDescending(r => r.Value).Select(r => $"{r.Key} x {r.Value:N0}"))}; " +
+            $"p50 {At(lat, 0.5):F0} ms, p95 {At(lat, 0.95):F0} ms, p99 {At(lat, 0.99):F0} ms");
+        Console.WriteLine($"  made: {made:N0} of {total:N0} ({100.0 * made / total:F1}%); {string.Join(", ", final.Where(f => f.Key != "made").Select(f => $"{f.Key} x {f.Value:N0}"))}");
+        if (!madeAfter.IsEmpty)
+        {
+            var after = madeAfter.Order().ToArray();
+            Console.WriteLine($"  accepted transfers, from request to made: p50 {At(after, 0.5):F0} ms, p99 {At(after, 0.99):F0} ms, max {after[^1]:F0} ms");
+        }
+        if (blip != "")
+            Console.WriteLine($"  sent while {blip} was down ({blipAt}-{blipAt + blipSeconds} s): {string.Join(", ", duringBlip.Select(d => $"{d.Key} x {d.Value:N0}"))}");
+        var stats = await fake.GetStringAsync("/checks/stats");
+        Console.WriteLine($"  checks: {stats}");
+    }
+
+    sealed record RequestStatus(string Status, string? Reason);
+
     static string Describe(Books books)
     {
         var missing = books.ExpectedTotal - books.TotalBalance;

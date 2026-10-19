@@ -17,7 +17,9 @@ public static class PayeesModule
     public static IServiceCollection AddPayeesModule(this IServiceCollection services, IConfiguration config)
     {
         services.AddDbContext<PayeesDb>(options => options
-            .UseNpgsql(config.GetConnectionString("Payees") ?? config.GetConnectionString("Modular"))
+            .UseNpgsql(config.GetConnectionString("Payees") ?? config.GetConnectionString("Modular"),
+                // The module records its own migrations, in its own schema.
+                npgsql => npgsql.MigrationsHistoryTable("__migrations", Schema))
             .UseSnakeCaseNamingConvention());
         services.AddScoped<PayeeStore>();
         services.AddScoped<IPayees>(sp => sp.GetRequiredService<PayeeStore>());
@@ -48,27 +50,33 @@ public static class PayeesModule
         return app;
     }
 
-    /// <summary>Creates the module's tables if they don't exist yet, and seeds three payees per account.</summary>
+    /// <summary>Brings the module's tables up to date, then seeds three payees per account if it has none.</summary>
     public static async Task PrepareAsync(IServiceProvider services, CancellationToken ct)
     {
         await using var scope = services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<PayeesDb>();
         var seed = scope.ServiceProvider.GetRequiredService<PayeesSeed>();
 
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        await db.Database.ExecuteSqlAsync($"SELECT pg_advisory_xact_lock(hashtext({Schema}))", ct);
-        var exists = await db.Database.SqlQuery<bool>($"SELECT to_regclass('payees.payees') IS NOT NULL AS \"Value\"").SingleAsync(ct);
-        if (!exists)
+        await db.Database.OpenConnectionAsync(ct);
+        try
         {
-            await db.Database.ExecuteSqlRawAsync(db.Database.GenerateCreateScript(), ct);
-            // Account n pays accounts n+1, n+2 and n+3, wrapping round at the end.
-            await db.Database.ExecuteSqlAsync($"""
-                INSERT INTO payees.payees (payee_id, customer_account_id, payee_account_id, name, reference, added_at)
-                SELECT uuidv7(), a, (a + k - 1) % {seed.Accounts} + 1, 'Customer ' || ((a + k - 1) % {seed.Accounts} + 1), 'Payment', now()
-                FROM generate_series(1, {seed.Accounts}) AS a, generate_series(1, 3) AS k
-                """, ct);
+            await db.Database.ExecuteSqlAsync($"SELECT pg_advisory_lock(hashtext({Schema}))", ct);
+            await db.Database.MigrateAsync(ct);
+            if (!await db.Payees.AnyAsync(ct))
+            {
+                // Account n pays accounts n+1, n+2 and n+3, wrapping round at the end.
+                await db.Database.ExecuteSqlAsync($"""
+                    INSERT INTO payees.payees (payee_id, customer_account_id, payee_account_id, name, reference, added_at)
+                    SELECT uuidv7(), a, (a + k - 1) % {seed.Accounts} + 1, 'Customer ' || ((a + k - 1) % {seed.Accounts} + 1), 'Payment', now()
+                    FROM generate_series(1, {seed.Accounts}) AS a, generate_series(1, 3) AS k
+                    """, ct);
+            }
         }
-        await transaction.CommitAsync(ct);
+        finally
+        {
+            await db.Database.ExecuteSqlAsync($"SELECT pg_advisory_unlock(hashtext({Schema}))", CancellationToken.None);
+            await db.Database.CloseConnectionAsync();
+        }
     }
 }
 

@@ -27,6 +27,16 @@
 //   curl -X POST "localhost:5090/fraud/blip?seconds=5&kind=slow"  (slow for five seconds)
 //
 // GET /fraud/stats shows, second by second, how many calls arrived and what happened to them.
+//
+// Journey B5 adds simple checks under /checks/{name}: customers, limits, fraud, any name. Each
+// passes after delayMs plus up to jitterMs, takes slowMs instead in slowRate of calls, and fails
+// in failureRate of them. One check can be taken down for a while:
+//
+//   curl -X POST localhost:5090/checks/settings -H "Content-Type: application/json" \
+//        -d '{"delayMs": 20, "jitterMs": 10, "slowRate": 0.01, "slowMs": 250, "failureRate": 0.01}'
+//   curl -X POST "localhost:5090/checks/fraud/blip?seconds=10"    (the fraud check down for ten seconds)
+//
+// GET /checks/stats counts calls and failures per check.
 using System.Collections.Concurrent;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -290,6 +300,54 @@ app.MapPost("/fraud/reset", () =>
 });
 // #endregion fraud-decision
 
+// #region checks
+var checks = new CheckSettings(20, 10, 0.01, 250, 0.0);
+var checkDownUntil = new ConcurrentDictionary<string, DateTimeOffset>();
+var checkCalls = new ConcurrentDictionary<string, int>();
+var checkFailures = new ConcurrentDictionary<string, int>();
+
+app.MapPost("/checks/{name}", async (string name, CancellationToken ct) =>
+{
+    checkCalls.AddOrUpdate(name, 1, (_, n) => n + 1);
+    var current = checks;
+    var down = checkDownUntil.TryGetValue(name, out var until) && until > DateTimeOffset.UtcNow;
+    if (down || Random.Shared.NextDouble() < current.FailureRate)
+    {
+        checkFailures.AddOrUpdate(name, 1, (_, n) => n + 1);
+        return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+    }
+    var delay = Random.Shared.NextDouble() < current.SlowRate
+        ? current.SlowMs
+        : current.DelayMs + Random.Shared.Next(current.JitterMs + 1);
+    await Task.Delay(delay, ct);
+    return Results.Ok(new { name, passed = true });
+});
+
+app.MapPost("/checks/settings", (CheckSettings next) => checks = next);
+
+app.MapPost("/checks/{name}/blip", (string name, int seconds) =>
+{
+    var until = DateTimeOffset.UtcNow.AddSeconds(seconds);
+    checkDownUntil[name] = until;
+    return Results.Ok(new { name, until });
+});
+
+app.MapGet("/checks/stats", () => new
+{
+    settings = checks,
+    calls = checkCalls,
+    failures = checkFailures,
+});
+
+app.MapPost("/checks/reset", () =>
+{
+    checkCalls.Clear();
+    checkFailures.Clear();
+    checkDownUntil.Clear();
+    return Results.Ok();
+});
+// #endregion checks
+
 app.Run();
 
 static object Lags(IEnumerable<double> values)
@@ -319,3 +377,5 @@ sealed class FraudSecond
     public int Refused;
     public int Failed;
 }
+
+sealed record CheckSettings(int DelayMs, int JitterMs, double SlowRate, int SlowMs, double FailureRate);

@@ -359,3 +359,32 @@ test.describe('rate limiter visualiser', () => {
     await expect(cell(sim, 'fixed', 'accepted')).toHaveText('10')
   })
 })
+
+test.describe('chain calculator', () => {
+  const url = '/backend/journeys/one-service-becomes-many/04-sync-or-async'
+  const stat = (sim: Locator, key: string) => sim.locator(`[data-stat="${key}"]`)
+
+  test('four services at 99.9% make a chain less available than any one of them', async ({ page }) => {
+    await page.goto(url)
+    const sim = page.locator('.chain-calculator')
+    await expect(stat(sim, 'available')).toHaveText('99.60%')
+    await expect(stat(sim, 'typical')).toHaveText('100 ms')
+    await expect(stat(sim, 'slow')).toHaveText('1 in 25')
+  })
+
+  test('calling in parallel fixes the typical time, not failures or slow calls', async ({ page }) => {
+    await page.goto(url)
+    const sim = page.locator('.chain-calculator')
+    await sim.locator('[data-mode="parallel"]').click()
+    await expect(stat(sim, 'typical')).toHaveText('25 ms')
+    await expect(stat(sim, 'available')).toHaveText('99.60%')
+    await expect(stat(sim, 'slow')).toHaveText('1 in 25')
+  })
+
+  test('a retry recovers independent failures', async ({ page }) => {
+    await page.goto(url)
+    const sim = page.locator('.chain-calculator')
+    await sim.locator('[data-mode="retry"]').click()
+    await expect(stat(sim, 'available')).toHaveText('99.9996%')
+  })
+})

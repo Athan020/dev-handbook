@@ -62,6 +62,17 @@ public class ModuleBoundaryTests
     }
 
     [Fact]
+    public void Every_change_to_a_modules_tables_has_a_migration()
+    {
+        foreach (var module in Modules)
+            foreach (var context in DbContextsIn(module.Assembly))
+                using (context)
+                {
+                    Assert.False(context.Database.HasPendingModelChanges(), $"{context.GetType().Name} has changes without a migration.");
+                }
+    }
+
+    [Fact]
     public void Every_module_with_tables_is_checked()
     {
         // Guards the schema test: if it found no DbContext, it would pass without checking anything.

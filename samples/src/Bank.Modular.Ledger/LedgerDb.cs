@@ -27,6 +27,7 @@ internal sealed class LedgerDb(DbContextOptions<LedgerDb> options) : DbContext(o
 {
     public DbSet<Account> Accounts => Set<Account>();
     public DbSet<Entry> Entries => Set<Entry>();
+    public DbSet<TransferRequest> TransferRequests => Set<TransferRequest>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {
@@ -48,6 +49,18 @@ internal sealed class LedgerDb(DbContextOptions<LedgerDb> options) : DbContext(o
             entry.Property(e => e.Amount).HasPrecision(18, 2);
             entry.Property(e => e.Reference).HasMaxLength(200);
             entry.HasIndex(e => new { e.AccountId, e.PostedAt });
+            entry.HasIndex(e => e.TransferId);
+        });
+
+        model.Entity<TransferRequest>(request =>
+        {
+            request.ToTable("transfer_requests");
+            request.HasKey(r => r.TransferId);
+            request.Property(r => r.Amount).HasPrecision(18, 2);
+            request.Property(r => r.Reference).HasMaxLength(200);
+            request.Property(r => r.Status).HasMaxLength(20);
+            request.Property(r => r.Reason).HasMaxLength(200);
+            request.HasIndex(r => new { r.Status, r.NextAttemptAt });
         });
     }
 }

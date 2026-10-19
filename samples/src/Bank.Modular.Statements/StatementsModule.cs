@@ -16,7 +16,9 @@ public static class StatementsModule
     public static IServiceCollection AddStatementsModule(this IServiceCollection services, IConfiguration config)
     {
         services.AddDbContext<StatementsDb>(options => options
-            .UseNpgsql(config.GetConnectionString("Statements") ?? config.GetConnectionString("Modular"))
+            .UseNpgsql(config.GetConnectionString("Statements") ?? config.GetConnectionString("Modular"),
+                // The module records its own migrations, in its own schema.
+                npgsql => npgsql.MigrationsHistoryTable("__migrations", Schema))
             .UseSnakeCaseNamingConvention());
         services.AddScoped<StatementBuilder>();
 
@@ -49,22 +51,28 @@ public static class StatementsModule
         return app;
     }
 
-    /// <summary>Creates the module's tables if they don't exist yet: the copy, and where it got to.</summary>
+    /// <summary>Brings the module's tables up to date: the copy, and where it got to.</summary>
     public static async Task PrepareAsync(IServiceProvider services, CancellationToken ct)
     {
         await using var scope = services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<StatementsDb>();
 
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        await db.Database.ExecuteSqlAsync($"SELECT pg_advisory_xact_lock(hashtext({Schema}))", ct);
-        var exists = await db.Database.SqlQuery<bool>($"SELECT to_regclass('statements.lines') IS NOT NULL AS \"Value\"").SingleAsync(ct);
-        if (!exists)
+        await db.Database.OpenConnectionAsync(ct);
+        try
         {
-            await db.Database.ExecuteSqlRawAsync(db.Database.GenerateCreateScript(), ct);
-            db.FeedPositions.Add(new FeedPosition { Feed = LedgerFeedFollower.Feed });
-            await db.SaveChangesAsync(ct);
+            await db.Database.ExecuteSqlAsync($"SELECT pg_advisory_lock(hashtext({Schema}))", ct);
+            await db.Database.MigrateAsync(ct);
+            if (!await db.FeedPositions.AnyAsync(p => p.Feed == LedgerFeedFollower.Feed, ct))
+            {
+                db.FeedPositions.Add(new FeedPosition { Feed = LedgerFeedFollower.Feed });
+                await db.SaveChangesAsync(ct);
+            }
         }
-        await transaction.CommitAsync(ct);
+        finally
+        {
+            await db.Database.ExecuteSqlAsync($"SELECT pg_advisory_unlock(hashtext({Schema}))", CancellationToken.None);
+            await db.Database.CloseConnectionAsync();
+        }
     }
 }
 

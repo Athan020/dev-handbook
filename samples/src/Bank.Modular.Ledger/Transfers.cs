@@ -3,13 +3,17 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Bank.Modular.Ledger;
 
-internal enum TransferOutcome { Completed, InsufficientFunds, UnknownAccount }
+internal enum TransferOutcome { Completed, InsufficientFunds, UnknownAccount, AlreadyFinished }
 
 /// <summary>Moves money between two accounts: both balances and both entries, or nothing.</summary>
 internal sealed class Transfers(LedgerDb db, TimeProvider time)
 {
+    /// <summary>
+    /// Moves the money. With <paramref name="completes"/>, it also completes that accepted
+    /// request in the same transaction, and does nothing if the request is no longer pending.
+    /// </summary>
     public async Task<(TransferOutcome Outcome, Guid TransferId)> MoveAsync(
-        int fromAccountId, int toAccountId, decimal amount, string reference, CancellationToken ct)
+        int fromAccountId, int toAccountId, decimal amount, string reference, CancellationToken ct, Guid? completes = null)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
 
@@ -23,10 +27,18 @@ internal sealed class Transfers(LedgerDb db, TimeProvider time)
         if (from.Balance < amount)
             return (TransferOutcome.InsufficientFunds, Guid.Empty);
 
+        var now = time.GetUtcNow();
+        if (completes is { } requestId)
+        {
+            var claimed = await db.TransferRequests
+                .Where(r => r.TransferId == requestId && r.Status == TransferStatus.Pending)
+                .ExecuteUpdateAsync(set => set.SetProperty(r => r.Status, TransferStatus.Completed).SetProperty(r => r.FinishedAt, now), ct);
+            if (claimed == 0) return (TransferOutcome.AlreadyFinished, requestId);
+        }
+
         from.Balance -= amount;
         to.Balance += amount;
-        var transferId = Guid.CreateVersion7();
-        var now = time.GetUtcNow();
+        var transferId = completes ?? Guid.CreateVersion7();
         db.Entries.AddRange(
             new Entry { TransferId = transferId, AccountId = fromAccountId, Amount = -amount, Reference = reference, PostedAt = now },
             new Entry { TransferId = transferId, AccountId = toAccountId, Amount = amount, Reference = reference, PostedAt = now });

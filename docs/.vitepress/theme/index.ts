@@ -2,6 +2,7 @@ import DefaultTheme from 'vitepress/theme'
 import type { Theme } from 'vitepress'
 import BacklogSimulator from './components/BacklogSimulator.vue'
 import CacheSimulator from './components/CacheSimulator.vue'
+import ChainCalculator from './components/ChainCalculator.vue'
 import DeliverySimulator from './components/DeliverySimulator.vue'
 import HashRingSimulator from './components/HashRingSimulator.vue'
 import InterleavingSimulator from './components/InterleavingSimulator.vue'
@@ -31,5 +32,6 @@ export default {
     app.component('InterleavingSimulator', InterleavingSimulator)
     app.component('RetryStormSimulator', RetryStormSimulator)
     app.component('RateLimiterVisualiser', RateLimiterVisualiser)
+    app.component('ChainCalculator', ChainCalculator)
   },
 } satisfies Theme
