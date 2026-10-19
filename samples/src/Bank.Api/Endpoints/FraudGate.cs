@@ -71,6 +71,17 @@ public static class FraudGate
         return services;
     }
 
+    /// <summary>
+    /// B4 stage 7: the same pipeline, outside an HttpClient, on a clock the caller controls, so a
+    /// test can check how the configured settings behave over simulated seconds in milliseconds.
+    /// </summary>
+    public static ResiliencePipeline<HttpResponseMessage> BuildPipeline(IConfiguration fraud, TimeProvider time)
+    {
+        var pipeline = new ResiliencePipelineBuilder<HttpResponseMessage> { TimeProvider = time };
+        Build(pipeline, fraud, new FraudStats());
+        return pipeline.Build();
+    }
+
     // Outermost first: the bulkhead admits a call, retries repeat it, the breaker can refuse
     // it, and the timeout limits each attempt.
     private static void Build(ResiliencePipelineBuilder<HttpResponseMessage> pipeline, IConfiguration fraud, FraudStats stats)
