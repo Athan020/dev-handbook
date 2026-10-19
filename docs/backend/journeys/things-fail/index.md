@@ -2,7 +2,7 @@
 title: "B4: Things fail"
 track: backend
 journey: things-fail
-status: draft
+status: written
 ---
 
 # B4: Things fail

@@ -3,7 +3,7 @@
 > A VitePress site for building **T-shaped** software engineering skills, organised by orientation (frontend or backend). It is meant to help engineers grow in their current role and prepare for multi-round interviews. It teaches judgement: creative problem solving that still respects good practice.
 
 **Plan version:** v2 (journey-based). Supersedes v1, which was topic-based and migration-first. See §9.
-**Status:** Phase 4 in progress (started 2026-10-12): writing B4 (approved 2026-10-15). B3 complete and approved (2026-10-15). Phase 3 complete and approved (2026-10-12).
+**Status:** Phase 4 in progress (started 2026-10-12): B4 written (approved 2026-10-15), awaiting review. B3 complete and approved (2026-10-15). Phase 3 complete and approved (2026-10-12).
 **Owner:** Athan
 **Source material:** `_source/backend-engineer-kb/` is a **quarry, not a blueprint**. See §6.
 
@@ -224,6 +224,7 @@ Do not carry these over as correct. Use them as "spot the bug" material where th
 | `06-cloud/messaging-events.md` — `EnqueueBatchAsync` | Reassigns a `using var` variable, which does not compile. | B2 (minor trap) |
 | `02-system-design/idempotency.md` — `PaymentService` | Debits and credits across services with no transaction or compensation, and stores the idempotency result in a cache separately from the database write. | B3 |
 | `05-databases/sql-fundamentals.md` — isolation levels | Runs `SET TRANSACTION ISOLATION LEVEL SERIALIZABLE` before `BEGIN`, which Postgres ignores with a warning, so the "critical" work runs at read committed. Its anomaly table omits lost updates and write skew. | B3 stage 1 |
+| `09-system-design-prep/02-rate-limiter.md` — `RateLimiterService` | Labelled "Token Bucket", but the Lua script is a fixed-window counter (`INCR` and `EXPIRE`), which lets a client send twice its limit around a window boundary. | B4 capstone |
 | `01-fundamentals/cap-theorem.md` | Presents CAP as "pick two" categories per product, and mislabels PACELC examples: Cassandra and DynamoDB default to latency over consistency when there's no partition (PA/EL), not PA/EC. | Phase 6 consistency reference |
 
 ## 9. Changes from v1

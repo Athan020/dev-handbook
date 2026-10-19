@@ -14,19 +14,19 @@ status: written
 
 The API now survives its dependencies failing. Then the danger comes from the other side. A payroll provider, a partner that submits salaries through the API, deploys a bug, and its integration starts retrying every request in a tight loop: a thousand requests a second, from one client. Nothing is down. Every customer's transfers just take ten seconds.
 
-In the lab, with customers sending 80 transfers a second and the partner 1,000, customers' transfers still succeeded, but the median took 10.2 seconds instead of 16 milliseconds.
+In the lab, with customers sending 80 transfers a second and the partner 1,000, customers' transfers still succeeded, but the median took 17 seconds instead of 14 milliseconds.
 
 ## Stop and think
 
 ::: think One partner is sending a thousand requests a second. Why are other customers affected?
 
-Because they all share one API's capacity. The API can do a few hundred transfers a second; the partner alone asks for more than that, so requests queue, and every customer's request waits behind the partner's. Nothing protects customers from one caller's appetite. Stage 4's bulkheads did that for dependencies; this needs the same idea for callers.
+Because they all share one API's capacity. The lab's API can do about 240 transfers a second; the partner alone asks for more than that, so requests queue, and every customer's request waits behind the partner's. Nothing protects customers from one caller's appetite. Stage 4's bulkheads did that for dependencies; this needs the same idea for callers.
 
 :::
 
 ::: think You add a limit of 200 requests a second for the whole API. What happens to customers now?
 
-They're refused. A single, shared limit doesn't distinguish callers: the partner uses most of the allowance, and customers find it already spent. In the lab, with a shared limit of 200 a second, only 22% of customers' transfers got through, while the partner got 188 a second. The limit protected the API and punished the wrong people.
+They're refused. A single, shared limit doesn't distinguish callers: the partner uses most of the allowance, and customers find it already spent. In the lab, with a shared limit of 200 a second, only about 20% of customers' transfers got through, while the partner got 190 a second. The limit protected the API and punished the wrong people.
 
 The limit has to be per caller: each client gets its own allowance, so one client's flood exhausts only its own.
 
@@ -34,7 +34,7 @@ The limit has to be per caller: each client gets its own allowance, so one clien
 
 ::: think You run two instances of the API, each limiting every client to 50 requests a second. How many does the partner get?
 
-Up to 100: 50 from each instance, because each counts on its own. In the lab, the partner got 102 a second through two instances, twice the limit. With N instances, an in-memory limit is N times what you wrote down, and it changes whenever you scale. For an exact limit, the instances must share a count: in the lab, a token bucket in Redis held the partner to 53 a second across both.
+Up to 100: 50 from each instance, because each counts on its own. In the lab, the partner got 106 a second through two instances, twice the limit, and customers paid for it: with the API that much closer to capacity, their median ranged from 66 ms to 9 seconds across three identical runs. With N instances, an in-memory limit is N times what you wrote down, and it changes whenever you scale. For an exact limit, the instances must share a count: in the lab, a token bucket in Redis held the partner to 53 a second across both.
 
 :::
 
@@ -85,13 +85,13 @@ One limit for all callers together.
 
 **Fixes:** total load.
 **Costs:** almost nothing.
-**Breaks:** the innocent: in the lab, customers got 22% of their transfers through, while the flooding partner got 188 a second.
+**Breaks:** the innocent: in the lab, customers got about 20% of their transfers through, while the flooding partner got 190 a second.
 
 ### 3. A limit per client
 
 Each client its own allowance, keyed by who they are.
 
-**Fixes:** one caller's flood reaching everyone else. In the lab, with 50 a second per client, customers got 100% of their transfers through with a median of 13 ms, and the partner was held to 53 a second.
+**Fixes:** one caller's flood reaching everyone else. In the lab, with 50 a second per client, customers got 100% of their transfers through with a median of 25 ms, and the partner was held to 53 a second.
 **Costs:** identifying clients reliably, and choosing limits per kind of client.
 **Breaks:** nothing on one instance. On several, the limit multiplies.
 
@@ -99,7 +99,7 @@ Each client its own allowance, keyed by who they are.
 
 Keep the counts in a shared store.
 
-**Fixes:** limits that multiply with instances. In the lab: 102 a second for the partner with in-memory limits on two instances; 53 a second with the bucket in Redis.
+**Fixes:** limits that multiply with instances. In the lab: 106 a second for the partner with in-memory limits on two instances; 53 a second with the bucket in Redis, and customers' median steady at 24 ms.
 **Costs:** a round trip per request, and a store to run and protect.
 **Breaks:** the API, if the store fails and the limiter fails closed. Fail open, and alert.
 
@@ -115,14 +115,14 @@ Different limits for different endpoints and costs: a cheap read and an expensiv
 
 | Setup (customers 80/s, partner 1,000/s, 30 s) | Customers succeeded | Customers' median | Partner got through |
 |---|---|---|---|
-| No partner | 100% | 16 ms | — |
-| No limit | 100% | 10.2 s | 234 a second |
-| Global limit, 200/s | 22% | — | 188 a second |
-| 50/s per client, one instance | 100% | 13 ms | 53 a second |
-| 50/s per client, in memory, two instances | 100% | 22 ms | 102 a second |
-| 50/s per client, in Redis, two instances | 100% | 16 ms | 53 a second |
+| No partner | 100% | 14 ms | — |
+| No limit | 100% | 17 s | 164 a second |
+| Global limit, 200/s | 18–20% | — | 190 a second |
+| 50/s per client, one instance | 100% | 23–25 ms | 53 a second |
+| 50/s per client, in memory, two instances | 100% | 66 ms to 9 s | 106 a second |
+| 50/s per client, in Redis, two instances | 100% | 24 ms | 53 a second |
 
-The partner gets 53 a second rather than 50 because the token bucket starts full: a burst of 100, then 50 a second.
+Ranges are across repeated runs. The partner gets 53 a second rather than 50 because the token bucket starts full: a burst of 100, then 50 a second. Who got through was the same in every run; latency wasn't, most of all with in-memory limits on two instances, where the partner's doubled allowance left the API little headroom, and in half of our six runs the API tipped into a backlog it never cleared.
 
 ## Traps
 
@@ -210,7 +210,7 @@ dotnet run --project tools/Bank.Load -- --noisy --seconds 30
 
 4. **A shared limit:** start Redis (`docker compose --profile redis up -d`), and add `--Lab:RateLimitStore=Redis` to both instances.
 
-Our results are in the table above.
+The load tool warms each instance up with a few transfers before the flood starts: an API meeting a thousand requests a second cold starts with a backlog, and can spend the whole run clearing it. Even so, latency varies between runs on one laptop, where the load tool, the APIs and the database compete for the same CPUs; run each case more than once. Our results are in the table above.
 
 ## What breaks next
 

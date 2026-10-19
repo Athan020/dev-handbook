@@ -26,7 +26,9 @@ public static class RateLimits
 
         if (config["Lab:RateLimitStore"] == "Redis")
         {
-            services.AddSingleton<IConnectionMultiplexer>(_ =>
+            // Connect now, at startup. Connecting lazily inside the first request blocks a thread
+            // while a flood of requests waits behind it: a slow start exactly when it hurts most.
+            services.AddSingleton<IConnectionMultiplexer>(
                 ConnectionMultiplexer.Connect(config.GetConnectionString("Redis") ?? "localhost:6379,abortConnect=false"));
             services.AddSingleton<RedisTokenBucket>();
             return services;

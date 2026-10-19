@@ -254,9 +254,11 @@ if (args.Contains("--outage"))
     (await fraudHttp.PostAsync("/fraud/reset", null)).EnsureSuccessStatusCode();
 
     // Warm up first, so start-up costs (compilation, connection pools) don't look like an outage.
-    for (var i = 0; i < 50; i++)
+    // Each warm-up request gets two seconds at most, in case a dependency is already failing.
+    for (var i = 0; i < 20; i++)
     {
-        try { using var _ = await http.PostAsJsonAsync("/transfers", options.NextTransfer()); } catch (Exception e) when (e is HttpRequestException or TaskCanceledException) { }
+        using var warmUp = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        try { using var _ = await http.PostAsJsonAsync("/transfers", options.NextTransfer(), warmUp.Token); } catch (Exception e) when (e is HttpRequestException or TaskCanceledException) { }
     }
     (await fraudHttp.PostAsync("/fraud/reset", null)).EnsureSuccessStatusCode();
 
@@ -368,6 +370,19 @@ if (args.Contains("--noisy"))
     var partnerRate = Arg("--partner-rate", 1000);
     var targets = (Array.IndexOf(args, "--targets") is var t and >= 0 ? args[t + 1] : options.Url)
         .Split(',').Select(url => new HttpClient { BaseAddress = new Uri(url), Timeout = TimeSpan.FromSeconds(30) }).ToArray();
+    // Warm up each instance first: a cold API meeting a flood starts with a backlog that can take
+    // the whole run to clear, so the results would measure start-up rather than the limiter.
+    foreach (var target in targets)
+    {
+        for (var i = 0; i < 20; i++)
+        {
+            using var warmUp = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            using var request = new HttpRequestMessage(HttpMethod.Post, "/transfers") { Content = JsonContent.Create(options.NextTransfer()) };
+            request.Headers.Add("X-Client-Id", "warm-up");
+            try { using var _ = await target.SendAsync(request, warmUp.Token); } catch (Exception e) when (e is HttpRequestException or TaskCanceledException) { }
+        }
+    }
+
     var results = new System.Collections.Concurrent.ConcurrentDictionary<string, OutageSecond>();
     var clock = Stopwatch.StartNew();
     var sent = 0;
