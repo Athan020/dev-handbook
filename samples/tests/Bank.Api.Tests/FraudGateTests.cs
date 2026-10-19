@@ -52,6 +52,48 @@ public sealed class FraudGateTests(BankApiFixture fixture) : IClassFixture<BankA
         Assert.Equal(HttpStatusCode.UnprocessableEntity, (await TransferAsync(client)).StatusCode);
     }
 
+    private sealed record ReviewCount(string Status, int Count, decimal Amount);
+
+    private static async Task<int> ReviewsAsync(HttpClient client, string status) =>
+        (await client.GetFromJsonAsync<List<ReviewCount>>("/fraud-reviews/summary", Ct))!.FirstOrDefault(r => r.Status == status)?.Count ?? 0;
+
+    [Fact]
+    public async Task Failing_closed_refuses_and_failing_open_goes_ahead_but_records_it()
+    {
+        var down = new StubFraud((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)));
+        await using (var closed = Api(down, ("Lab:FraudGate", "BeforeTransaction"), ("Fraud:Fallback", "FailClosed")))
+        {
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, (await TransferAsync(closed.CreateClient())).StatusCode);
+        }
+
+        await using var open = Api(down, ("Lab:FraudGate", "BeforeTransaction"), ("Fraud:Fallback", "FailOpen"));
+        var client = open.CreateClient();
+        var before = await ReviewsAsync(client, "Unchecked");
+        Assert.Equal(HttpStatusCode.Created, (await TransferAsync(client, 50_000m)).StatusCode);
+        Assert.Equal(before + 1, await ReviewsAsync(client, "Unchecked"));
+    }
+
+    [Fact]
+    public async Task Allowing_small_transfers_holds_large_ones_until_fraud_can_decide()
+    {
+        var up = false;
+        var fraud = new StubFraud((_, _) => Task.FromResult(up ? Decision("approve") : new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)));
+        await using var api = Api(fraud, ("Lab:FraudGate", "BeforeTransaction"), ("Fraud:Fallback", "AllowSmall"), ("Fraud:FallbackLimit", "1000"));
+        var client = api.CreateClient();
+        var releasedBefore = await ReviewsAsync(client, "Released");
+
+        Assert.Equal(HttpStatusCode.Created, (await TransferAsync(client, 200m)).StatusCode);
+        var large = await TransferAsync(client, 5_000m);
+        Assert.Equal(HttpStatusCode.Accepted, large.StatusCode);
+
+        up = true; // the fraud service recovers; the releaser makes the held transfer
+        for (var i = 0; i < 40 && await ReviewsAsync(client, "Released") == releasedBefore; i++)
+        {
+            await Task.Delay(250, Ct);
+        }
+        Assert.Equal(releasedBefore + 1, await ReviewsAsync(client, "Released"));
+    }
+
     [Fact]
     public async Task An_open_breaker_fails_fast_without_calling_the_fraud_service()
     {

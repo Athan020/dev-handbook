@@ -10,6 +10,20 @@ CREATE TABLE accounts (
 );
 
 
+CREATE TABLE fraud_reviews (
+    id uuid NOT NULL,
+    from_account_id integer NOT NULL,
+    to_account_id integer NOT NULL,
+    amount numeric(18,2) NOT NULL,
+    reference character varying(200) NOT NULL,
+    status character varying(20) NOT NULL,
+    transfer_id uuid,
+    created_at timestamp with time zone NOT NULL,
+    resolved_at timestamp with time zone,
+    CONSTRAINT pk_fraud_reviews PRIMARY KEY (id)
+);
+
+
 CREATE TABLE idempotency_keys (
     payer_account_id integer NOT NULL,
     key character varying(100) NOT NULL,
@@ -95,6 +109,9 @@ CREATE TABLE transactions (
     CONSTRAINT fk_transactions_accounts_account_id FOREIGN KEY (account_id) REFERENCES accounts (id) ON DELETE RESTRICT,
     CONSTRAINT fk_transactions_accounts_counterparty_account_id FOREIGN KEY (counterparty_account_id) REFERENCES accounts (id) ON DELETE RESTRICT
 );
+
+
+CREATE INDEX ix_fraud_reviews_created_at ON fraud_reviews (created_at) WHERE status = 'Held';
 
 
 CREATE INDEX ix_idempotency_keys_created_at ON idempotency_keys (created_at);

@@ -12,6 +12,7 @@ public sealed class BankDb(DbContextOptions<BankDb> options) : DbContext(options
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
     public DbSet<IdempotencyKey> IdempotencyKeys => Set<IdempotencyKey>();
     public DbSet<OutgoingPayment> OutgoingPayments => Set<OutgoingPayment>();
+    public DbSet<FraudReview> FraudReviews => Set<FraudReview>();
     public DbSet<StatementAccount> StatementAccounts => Set<StatementAccount>();
     public DbSet<StatementProblem> StatementProblems => Set<StatementProblem>();
 
@@ -78,6 +79,16 @@ public sealed class BankDb(DbContextOptions<BankDb> options) : DbContext(options
             payment.Property(p => p.Status).HasMaxLength(20);
             // The resolver looks for payments still pending, oldest first.
             payment.HasIndex(p => p.CreatedAt).HasFilter("status = 'Pending'");
+        });
+
+        // Journey B4 stage 5.
+        model.Entity<FraudReview>(review =>
+        {
+            review.ToTable("fraud_reviews");
+            review.Property(r => r.Amount).HasPrecision(18, 2);
+            review.Property(r => r.Reference).HasMaxLength(200);
+            review.Property(r => r.Status).HasMaxLength(20);
+            review.HasIndex(r => r.CreatedAt).HasFilter("status = 'Held'");
         });
 
         model.Entity<OutboxMessage>(outbox =>

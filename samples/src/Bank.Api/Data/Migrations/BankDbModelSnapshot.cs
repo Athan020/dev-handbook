@@ -73,6 +73,60 @@ namespace Bank.Api.Data.Migrations
                     b.ToTable("accounts", (string)null);
                 });
 
+            modelBuilder.Entity("Bank.Api.Data.FraudReview", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("FromAccountId")
+                        .HasColumnType("integer")
+                        .HasColumnName("from_account_id");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("reference");
+
+                    b.Property<DateTimeOffset?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resolved_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<int>("ToAccountId")
+                        .HasColumnType("integer")
+                        .HasColumnName("to_account_id");
+
+                    b.Property<Guid?>("TransferId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transfer_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_fraud_reviews");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_fraud_reviews_created_at")
+                        .HasFilter("status = 'Held'");
+
+                    b.ToTable("fraud_reviews", (string)null);
+                });
+
             modelBuilder.Entity("Bank.Api.Data.IdempotencyKey", b =>
                 {
                     b.Property<int>("PayerAccountId")

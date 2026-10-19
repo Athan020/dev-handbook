@@ -69,12 +69,30 @@ public static class TransferEndpoints
         // B4: ask the fraud service before moving any money, either here, before the database
         // transaction, or (Lab:FraudGate=InTransaction) inside it, holding a connection while it waits.
         var fraud = config["Lab:FraudGate"] is "BeforeTransaction" or "InTransaction" ? services.GetRequiredService<FraudClient>() : null;
+        var proceedUnchecked = false;
         if (fraud is not null && config["Lab:FraudGate"] == "BeforeTransaction")
         {
             var outcome = await fraud.DecideAsync(request.FromAccountId, request.ToAccountId, request.Amount, ct);
-            if (outcome.Decision != FraudDecision.Approved)
+            switch (FraudGate.OnOutcome(outcome, request.Amount, config))
             {
-                return FraudRefusal(outcome);
+                case FallbackAction.Refuse:
+                    return FraudRefusal(outcome);
+                case FallbackAction.Hold:
+                    // #region hold
+                    // B4 stage 5: no decision for a large transfer. Keep the request, tell the customer
+                    // it's being checked, and let HeldTransferReleaser make it once fraud can decide.
+                    var held = new FraudReview
+                    {
+                        Id = Guid.CreateVersion7(), FromAccountId = request.FromAccountId, ToAccountId = request.ToAccountId,
+                        Amount = request.Amount, Reference = request.Reference, Status = "Held", CreatedAt = DateTimeOffset.UtcNow,
+                    };
+                    db.FraudReviews.Add(held);
+                    await db.SaveChangesAsync(ct);
+                    return Results.Accepted($"/fraud-reviews/{held.Id}", new { held.Id, held.Status });
+                    // #endregion hold
+                case FallbackAction.ProceedUnchecked:
+                    proceedUnchecked = true;
+                    break;
             }
         }
         var fraudInTransaction = config["Lab:FraudGate"] == "InTransaction" ? fraud : null;
@@ -87,7 +105,7 @@ public static class TransferEndpoints
         {
             try
             {
-                recorded = await RecordTransferAsync(db, request, outbox, config, claim, fraudInTransaction, ct);
+                recorded = await RecordTransferAsync(db, request, outbox, config, claim, fraudInTransaction, ct, proceedUnchecked);
                 break;
             }
             catch (Exception e) when (Funds.IsRetryable(e))
@@ -229,9 +247,14 @@ public static class TransferEndpoints
     /// Records the debit and the credit in one database transaction. Journey B3 adds the checks
     /// that make it safe to move money (see Funds): returns null if the account can't afford it.
     /// </summary>
+    // A held transfer, made once the fraud service has approved it (B4 stage 5). Null if the
+    // payer can't afford it now.
+    public static async Task<TransferCompleted?> MakeHeldTransferAsync(BankDb db, TransferRequest request, IConfiguration config, CancellationToken ct) =>
+        (await RecordTransferAsync(db, request, config["Lab:Transfers"] == "Outbox", config, null, null, ct)).Transfer;
+
     private static async Task<Recorded> RecordTransferAsync(
         BankDb db, TransferRequest request, bool outbox, IConfiguration config, (string Key, string Hash)? claim,
-        FraudClient? fraudInTransaction, CancellationToken ct)
+        FraudClient? fraudInTransaction, CancellationToken ct, bool proceedUnchecked = false)
     {
         await using var dbTransaction = await db.Database.BeginTransactionAsync(Funds.Isolation(config), ct);
 
@@ -325,6 +348,18 @@ public static class TransferEndpoints
             return new Recorded(null); // rolling back also removes the rows written above
         }
         // #endregion lock-late
+
+        if (proceedUnchecked)
+        {
+            // B4 stage 5: made without a fraud decision; recorded, in the same transaction, for review.
+            db.FraudReviews.Add(new FraudReview
+            {
+                Id = Guid.CreateVersion7(), FromAccountId = request.FromAccountId, ToAccountId = request.ToAccountId,
+                Amount = request.Amount, Reference = request.Reference, Status = "Unchecked",
+                TransferId = transfer.TransferId, CreatedAt = now,
+            });
+            await db.SaveChangesAsync(ct);
+        }
 
         if (claim is var (claimedKey, _))
         {

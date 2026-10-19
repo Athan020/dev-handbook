@@ -18,6 +18,14 @@ public enum FraudDecision
 
 public sealed record FraudOutcome(FraudDecision Decision, string Detail);
 
+public enum FallbackAction
+{
+    Proceed,
+    ProceedUnchecked,
+    Hold,
+    Refuse,
+}
+
 /// <summary>
 /// Journey B4. Every transfer asks the fraud service for a decision before it happens
 /// (Lab:FraudGate). How the API copes when that service is slow, failing or down is set by the
@@ -29,9 +37,30 @@ public sealed record FraudOutcome(FraudDecision Decision, string Detail);
 ///   Fraud:Breaker=true, Fraud:BreakerFailureRatio, Fraud:BreakerMinimumThroughput,
 ///   Fraud:BreakerSamplingSeconds, Fraud:BreakerBreakSeconds
 ///   Fraud:MaxConcurrent, Fraud:QueueLimit   a bulkhead: calls allowed at once, and waiting
+///   Fraud:Fallback=FailClosed (the default) | FailOpen | AllowSmall, with Fraud:FallbackLimit
+///     what to do when there's no decision (stage 5; with Lab:FraudGate=BeforeTransaction)
 /// </summary>
 public static class FraudGate
 {
+    // #region fallback
+    // What a transfer does with the fraud service's answer, or without one. The fallback is a
+    // business decision about risk, not a technical default.
+    public static FallbackAction OnOutcome(FraudOutcome outcome, decimal amount, IConfiguration config) => outcome.Decision switch
+    {
+        FraudDecision.Approved => FallbackAction.Proceed,
+        FraudDecision.Declined => FallbackAction.Refuse,
+        _ => config["Fraud:Fallback"] switch
+        {
+            // Every transfer goes ahead unchecked: no outage for customers, unlimited fraud risk.
+            "FailOpen" => FallbackAction.ProceedUnchecked,
+            // Small transfers go ahead, recorded for review afterwards; large ones wait for a decision.
+            "AllowSmall" => amount <= config.GetValue("Fraud:FallbackLimit", 1_000m) ? FallbackAction.ProceedUnchecked : FallbackAction.Hold,
+            // No transfer without a decision: no fraud risk, a full outage for customers.
+            _ => FallbackAction.Refuse,
+        },
+    };
+    // #endregion fallback
+
     public static IServiceCollection AddFraudGate(this IServiceCollection services, IConfiguration config)
     {
         var fraud = config.GetSection("Fraud");
