@@ -105,8 +105,15 @@ internal sealed class TransferProcessor(IServiceScopeFactory scopes, ProcessorOp
 
             // Moving the money also marks the request completed, in one transaction, so a
             // request can't be paid twice even if two processors reach this point.
+            var db = services.GetRequiredService<LedgerDb>();
             var (outcome, _) = await services.GetRequiredService<Transfers>().MoveAsync(
-                request.FromAccountId, payee.PayeeAccountId, request.Amount, request.Reference ?? payee.Reference, ct, completes: request.TransferId);
+                request.FromAccountId, payee.PayeeAccountId, request.Amount, request.Reference ?? payee.Reference, ct,
+                transferId: request.TransferId,
+                alongside: async ct => await db.TransferRequests
+                    .Where(r => r.TransferId == request.TransferId && r.Status == TransferStatus.Pending)
+                    .ExecuteUpdateAsync(set => set
+                        .SetProperty(r => r.Status, TransferStatus.Completed)
+                        .SetProperty(r => r.FinishedAt, time.GetUtcNow()), ct) == 1);
             if (outcome == TransferOutcome.InsufficientFunds) await RejectAsync(services, request, "Insufficient funds.", ct);
             else if (outcome == TransferOutcome.UnknownAccount) await RejectAsync(services, request, "No such account.", ct);
         }

@@ -388,3 +388,36 @@ test.describe('chain calculator', () => {
     await expect(stat(sim, 'available')).toHaveText('99.9996%')
   })
 })
+
+test.describe('saga stepper', () => {
+  const url = '/backend/journeys/one-service-becomes-many/05-sagas'
+
+  async function choose(page: Page, mode: string, fault: string) {
+    await page.goto(url)
+    const sim = page.locator('.saga-stepper')
+    await sim.locator(`[data-mode="${mode}"]`).click()
+    await sim.locator(`[data-fault="${fault}"]`).click()
+    return sim
+  }
+
+  test('a lost reply makes in-memory compensation refund money the card already has', async ({ page }) => {
+    const sim = await choose(page, 'memory', 'lostreply')
+    await expect(sim.locator('[data-col="account"]')).toHaveText('R500')
+    await expect(sim.locator('[data-col="card"]')).toHaveText('R100')
+    await expect(sim.locator('[data-verdict]')).toContainText('created from nothing')
+  })
+
+  test('a crash after the debit leaves the naive version holding the money', async ({ page }) => {
+    const sim = await choose(page, 'naive', 'crash')
+    await expect(sim.locator('[data-col="transit"]')).toHaveText('R100')
+    await expect(sim.locator('[data-verdict]')).toContainText('on no card')
+  })
+
+  test('the saga gets every fault right', async ({ page }) => {
+    for (const fault of ['none', 'declined', 'noanswer', 'lostreply', 'crash']) {
+      const sim = await choose(page, 'saga', fault)
+      await expect(sim.locator('[data-verdict]')).toHaveText(/^Right/)
+      await expect(sim.locator('[data-col="transit"]')).toHaveText('R0')
+    }
+  })
+})

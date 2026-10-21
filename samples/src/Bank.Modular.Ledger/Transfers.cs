@@ -9,43 +9,45 @@ internal enum TransferOutcome { Completed, InsufficientFunds, UnknownAccount, Al
 internal sealed class Transfers(LedgerDb db, TimeProvider time)
 {
     /// <summary>
-    /// Moves the money. With <paramref name="completes"/>, it also completes that accepted
-    /// request in the same transaction, and does nothing if the request is no longer pending.
+    /// Moves the money. <paramref name="alongside"/>, if given, runs in the same transaction,
+    /// after the balance is checked and before anything is saved; if it returns false, nothing
+    /// is saved. Accepted transfers and sagas use it to record their progress with the money.
     /// </summary>
     public async Task<(TransferOutcome Outcome, Guid TransferId)> MoveAsync(
-        int fromAccountId, int toAccountId, decimal amount, string reference, CancellationToken ct, Guid? completes = null)
+        int fromAccountId, int toAccountId, decimal amount, string reference, CancellationToken ct,
+        Guid? transferId = null, Func<CancellationToken, Task<bool>>? alongside = null)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
 
         // Lock both rows in account order, so two opposite transfers can't deadlock (B3 stage 2).
+        // Untracked: a context that has seen these accounts before would otherwise hand back its
+        // remembered balances instead of the ones just locked.
         var accounts = await db.Accounts
             .FromSql($"SELECT * FROM ledger.accounts WHERE account_id IN ({fromAccountId}, {toAccountId}) ORDER BY account_id FOR NO KEY UPDATE")
+            .AsNoTracking()
             .ToDictionaryAsync(a => a.AccountId, ct);
 
-        if (!accounts.TryGetValue(fromAccountId, out var from) || !accounts.TryGetValue(toAccountId, out var to))
+        if (!accounts.TryGetValue(fromAccountId, out var from) || !accounts.ContainsKey(toAccountId))
             return (TransferOutcome.UnknownAccount, Guid.Empty);
         if (from.Balance < amount)
             return (TransferOutcome.InsufficientFunds, Guid.Empty);
+        if (alongside is not null && !await alongside(ct))
+            return (TransferOutcome.AlreadyFinished, transferId ?? Guid.Empty);
 
+        await db.Database.ExecuteSqlAsync($"""
+            UPDATE ledger.accounts
+            SET balance = balance + CASE WHEN account_id = {fromAccountId} THEN -{amount} ELSE {amount} END
+            WHERE account_id IN ({fromAccountId}, {toAccountId})
+            """, ct);
+        var id = transferId ?? Guid.CreateVersion7();
         var now = time.GetUtcNow();
-        if (completes is { } requestId)
-        {
-            var claimed = await db.TransferRequests
-                .Where(r => r.TransferId == requestId && r.Status == TransferStatus.Pending)
-                .ExecuteUpdateAsync(set => set.SetProperty(r => r.Status, TransferStatus.Completed).SetProperty(r => r.FinishedAt, now), ct);
-            if (claimed == 0) return (TransferOutcome.AlreadyFinished, requestId);
-        }
-
-        from.Balance -= amount;
-        to.Balance += amount;
-        var transferId = completes ?? Guid.CreateVersion7();
         db.Entries.AddRange(
-            new Entry { TransferId = transferId, AccountId = fromAccountId, Amount = -amount, Reference = reference, PostedAt = now },
-            new Entry { TransferId = transferId, AccountId = toAccountId, Amount = amount, Reference = reference, PostedAt = now });
+            new Entry { TransferId = id, AccountId = fromAccountId, Amount = -amount, Reference = reference, PostedAt = now },
+            new Entry { TransferId = id, AccountId = toAccountId, Amount = amount, Reference = reference, PostedAt = now });
 
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
-        return (TransferOutcome.Completed, transferId);
+        return (TransferOutcome.Completed, id);
     }
 }
 

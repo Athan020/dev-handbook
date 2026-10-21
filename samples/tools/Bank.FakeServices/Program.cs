@@ -37,6 +37,16 @@
 //   curl -X POST "localhost:5090/checks/fraud/blip?seconds=10"    (the fraud check down for ten seconds)
 //
 // GET /checks/stats counts calls and failures per check.
+//
+// B5 stage 5 adds a cards service under /cards: POST /cards/{cardId}/top-ups credits a prepaid
+// card, once per reference however often it's asked. It declines cards whose id starts with
+// "blocked", fails before crediting in failureRate of calls, and in lostReplyRate of them
+// credits the card but answers too late for the caller to wait (a lost reply):
+//
+//   curl -X POST localhost:5090/cards/settings -H "Content-Type: application/json" \
+//        -d '{"failureRate": 0.05, "lostReplyRate": 0.05, "replyDelayMs": 3000}'
+//
+// GET /cards/top-ups lists every top-up it has applied, for reconciliation.
 using System.Collections.Concurrent;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -348,6 +358,44 @@ app.MapPost("/checks/reset", () =>
 });
 // #endregion checks
 
+// #region cards
+var cards = new CardSettings(0.0, 0.0, 3000);
+var cardTopUps = new ConcurrentDictionary<string, CardTopUp>();
+DateTimeOffset? cardsDownUntil = null;
+
+app.MapPost("/cards/{cardId}/top-ups", async (string cardId, CardTopUpRequest request, CancellationToken ct) =>
+{
+    var current = cards;
+    if (cardsDownUntil > DateTimeOffset.UtcNow || Random.Shared.NextDouble() < current.FailureRate)
+        return Results.StatusCode(StatusCodes.Status503ServiceUnavailable); // nothing applied
+    if (cardId.StartsWith("blocked", StringComparison.Ordinal))
+        return Results.Problem(statusCode: StatusCodes.Status422UnprocessableEntity, title: "The card is blocked.");
+
+    // Idempotent: a reference is applied once, and asking again returns the same top-up.
+    var topUp = cardTopUps.GetOrAdd(request.Reference, reference => new CardTopUp(reference, cardId, request.Amount, DateTimeOffset.UtcNow));
+    if (Random.Shared.NextDouble() < current.LostReplyRate)
+        await Task.Delay(current.ReplyDelayMs, CancellationToken.None); // applied, but the caller has given up waiting
+    return Results.Ok(topUp);
+});
+
+app.MapGet("/cards/top-ups", () => cardTopUps.Values.OrderBy(t => t.AppliedAt));
+
+app.MapPost("/cards/settings", (CardSettings next) => cards = next);
+
+app.MapPost("/cards/blip", (int seconds) =>
+{
+    cardsDownUntil = DateTimeOffset.UtcNow.AddSeconds(seconds);
+    return Results.Ok(new { until = cardsDownUntil });
+});
+
+app.MapPost("/cards/reset", () =>
+{
+    cardTopUps.Clear();
+    cardsDownUntil = null;
+    return Results.Ok();
+});
+// #endregion cards
+
 app.Run();
 
 static object Lags(IEnumerable<double> values)
@@ -379,3 +427,6 @@ sealed class FraudSecond
 }
 
 sealed record CheckSettings(int DelayMs, int JitterMs, double SlowRate, int SlowMs, double FailureRate);
+sealed record CardSettings(double FailureRate, double LostReplyRate, int ReplyDelayMs);
+sealed record CardTopUpRequest(string Reference, decimal Amount);
+sealed record CardTopUp(string Reference, string CardId, decimal Amount, DateTimeOffset AppliedAt);

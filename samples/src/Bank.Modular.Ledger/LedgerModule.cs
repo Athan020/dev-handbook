@@ -44,6 +44,21 @@ public static class LedgerModule
                 config.GetValue("Transfers:ProcessorBatchSize", 32), TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(5)));
             services.AddHostedService<TransferProcessor>();
         }
+
+        // B5 stage 5: card top-ups, a saga across the ledger and the cards service.
+        var topUps = new TopUpOptions(
+            Enum.Parse<TopUpMode>(config["Lab:TopUps"] ?? "Naive", ignoreCase: true),
+            config.GetValue("Lab:CrashRate", 0.0),
+            TimeSpan.FromSeconds(config.GetValue("TopUps:LeaseSeconds", 10)),
+            BatchSize: 32);
+        services.AddSingleton(topUps);
+        services.AddScoped<TopUpSteps>();
+        services.AddHttpClient<CardsClient>(http =>
+        {
+            http.BaseAddress = new Uri(config["FakeServices:Url"] ?? "http://localhost:5090");
+            http.Timeout = TimeSpan.FromMilliseconds(config.GetValue("Cards:TimeoutMs", 1000));
+        });
+        if (topUps.Mode == TopUpMode.Saga) services.AddHostedService<CardTopUpOrchestrator>();
         return services;
     }
 
@@ -89,6 +104,8 @@ public static class LedgerModule
 
         app.MapGet("/accounts/{accountId:int}/entries", async (int accountId, DateTimeOffset from, DateTimeOffset to, ILedger ledger, CancellationToken ct) =>
             Results.Ok(await ledger.EntriesAsync(accountId, from, to, ct)));
+
+        CardTopUpEndpoints.Map(app);
 
         app.MapGet("/ledger/check", async (LedgerDb db, CancellationToken ct) => Results.Ok(await EntityEndpoints.CheckAsync(db, ct)));
 
@@ -136,7 +153,13 @@ public static class LedgerModule
         {
             await db.Database.ExecuteSqlAsync($"SELECT pg_advisory_lock(hashtext({Schema}))", ct);
             await db.Database.MigrateAsync(ct);
-            if (!await db.Accounts.AnyAsync(ct))
+            // The bank's own accounts, which hold money on its way somewhere (stage 5).
+            await db.Database.ExecuteSqlAsync($"""
+                INSERT INTO ledger.accounts (account_id, holder_name, balance)
+                VALUES ({LedgerSeed.CardTopUpsInTransit}, 'Card top-ups in transit', 0), ({LedgerSeed.CardFunding}, 'Card funding', 0)
+                ON CONFLICT (account_id) DO NOTHING
+                """, ct);
+            if (!await db.Accounts.AnyAsync(a => a.AccountId > 0, ct))
             {
                 await db.Database.ExecuteSqlAsync($"""
                     INSERT INTO ledger.accounts (account_id, holder_name, balance)
@@ -155,6 +178,12 @@ public static class LedgerModule
 internal sealed record LedgerSeed(int Accounts)
 {
     public const decimal OpeningBalance = 10_000m;
+
+    /// <summary>Money taken from customers for card top-ups, until the card is credited or the money returned.</summary>
+    public const int CardTopUpsInTransit = -1;
+
+    /// <summary>Money that has reached customers' cards, owed to the cards service.</summary>
+    public const int CardFunding = -2;
 }
 
 internal sealed record PayRequest(int FromAccountId, Guid PayeeId, decimal Amount, string? Reference);

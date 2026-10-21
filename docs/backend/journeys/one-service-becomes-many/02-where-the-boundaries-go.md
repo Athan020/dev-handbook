@@ -14,7 +14,7 @@ status: written
 
 The team agreed to fix the boundaries first. The first proposal arrived as a list of tables: an Account service that owns the accounts table, and a Transaction service that owns the entries. Each offers a tidy API: read an account, set its balance, record an entry. A transfer is now composed by its caller: read both accounts, set both balances, record both entries. Six calls to two services, where there used to be one.
 
-In the lab, with 16 callers sending transfers for 20 seconds, the one-call version managed 205 to 317 transfers a second across three runs; the six-call version managed 72 to 188, and its median latency was nearly double. That was the smaller problem. After each six-call run, between 33 and 79 accounts' balances no longer matched their own entries, and the bank's total had moved by R50 to R70: up in two runs, down in one. Nothing had failed. Money had simply been created, or destroyed.
+In the lab, with 16 callers sending transfers for 20 seconds, the one-call version managed 291 to 373 transfers a second across three runs; the six-call version managed 196 to 237, and its median latency was about 60% higher. That was the smaller problem. After each six-call run, between 83 and 100 accounts' balances no longer matched their own entries, and the bank's total had moved, by anything from R2 to R361: up in one run, down in two. Nothing had failed. Money had simply been created, or destroyed.
 
 ## Stop and think
 
@@ -23,7 +23,7 @@ In the lab, with 16 callers sending transfers for 20 seconds, the one-call versi
 The rule that matters most: money is never created or destroyed, and every balance equals its entries. That rule spans both tables, but now no single service can enforce it. Nothing wraps the six calls in one transaction, so:
 
 - **Concurrent transfers lose updates.** Two transfers into the same account both read a balance of R100, then each sets it to R100 plus its own amount; one credit disappears. Two debits from the same account do the same, and money appears. That's B3 stage 1's check-then-act race, now across a network.
-- **A caller that stops halfway leaves money half-moved.** Debited from one account, never credited to the other. In the lab, with 1% of callers crashing after the debit, as a deployment or an out-of-memory kill would, one 20-second run lost R1,170.
+- **A caller that stops halfway leaves money half-moved.** Debited from one account, never credited to the other. In the lab, with 1% of callers crashing after the debit, as a deployment or an out-of-memory kill would, one 20-second run lost R1,927.
 
 :::
 
@@ -173,8 +173,8 @@ public async Task TransferAsync(int fromId, int toId, decimal amount, Cancellati
 ```
 
 ::: details Answer
-- **Lost updates.** Two transfers touching the same account read the same balance, and the second write overwrites the first. Money is created or destroyed; in the lab, up to 79 accounts disagreed with their entries after 20 seconds.
-- **Partial failure.** If the process stops after the first `SetBalanceAsync`, the money has left one account and arrived nowhere, and nothing will notice. In the lab, a 1% crash rate lost up to R1,170 in a 20-second run.
+- **Lost updates.** Two transfers touching the same account read the same balance, and the second write overwrites the first. Money is created or destroyed; in the lab, up to 100 accounts disagreed with their entries after 20 seconds.
+- **Partial failure.** If the process stops after the first `SetBalanceAsync`, the money has left one account and arrived nowhere, and nothing will notice. In the lab, a 1% crash rate lost up to R1,927 in a 20-second run.
 - **Retries make it worse.** If a timeout makes the caller retry `RecordAsync`, the entry is recorded twice (B3 stage 3).
 - **It's chatty**: six round trips for the bank's most common operation, each one able to fail or be slow (B4).
 
@@ -224,16 +224,16 @@ From the `samples` folder, with Postgres running.
 
    | Split | Transfers a second | Median | Calls each | Accounts disagreeing after 20 s | Total changed by |
    |---|---|---|---|---|---|
-   | By capability | 205–317 | 45–58 ms | 1 | 0 | R0 |
-   | By table | 72–188 | 76–157 ms | 6 | 33–79 | R51–69, up or down |
-   | By table, 1% of callers crash after the debit | 125–180 | 80–90 ms | 6 | 73–95 | R44–1,170 lost |
+   | By capability | 291–373 | 38–44 ms | 1 | 0 | R0 |
+   | By table | 196–237 | 62–68 ms | 6 | 83–100 | R2–361, up or down |
+   | By table, 1% of callers crash after the debit | 134–266 | 55–96 ms | 6 | 89–157 | R1,099–1,927 lost |
 
    Three runs of each; throughput varied with what else the laptop was doing, but the books never balanced after a by-table run.
 
-   To start the books again, stop the app, drop the ledger's schema, and start it again; the module recreates and reseeds it:
+   To start the books again, stop the app, drop the ledger's schema, and start it again; the module recreates and reseeds it. Drop the statements' schema too, because its copy of the ledger (stage 3) remembers positions in the old one:
 
    ```sh
-   docker compose exec postgres psql -U bank -d bank -c "DROP SCHEMA ledger CASCADE"
+   docker compose exec postgres psql -U bank -d bank -c "DROP SCHEMA ledger CASCADE; DROP SCHEMA statements CASCADE"
    ```
 
 3. **Find what changes together** in the original API, then in the whole of `src`:

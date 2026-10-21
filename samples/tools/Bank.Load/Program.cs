@@ -34,6 +34,10 @@
 //
 // --chain sends transfers that depend on several services, optionally taking one down (B5 stage 4).
 //
+// --top-ups N sends card top-ups and reconciles the ledger with the cards service (B5 stage 5).
+//
+// --home calls|bff loads the mobile app's home screen, call by call or through one BFF call (B5 stage 6).
+//
 // --race N runs rounds of a race (B3 stage 1): open an account, deposit --deposit (default 100),
 // then send N transfers of --amount (default 60) from it, all at once. It reports how the API
 // answered, and in how many of --rounds rounds (default 50) the account ended up overdrawn.
@@ -46,6 +50,8 @@ if (args.Contains("--split")) { await ModularLabs.SplitAsync(args); return; }
 if (args.Contains("--co-change")) { ModularLabs.CoChange(args); return; }
 if (args.Contains("--staleness")) { await ModularLabs.StalenessAsync(args); return; }
 if (args.Contains("--chain")) { await ModularLabs.ChainAsync(args); return; }
+if (args.Contains("--top-ups")) { await ModularLabs.TopUpsAsync(args); return; }
+if (args.Contains("--home")) { await ModularLabs.HomeAsync(args); return; }
 
 var options = Options.Parse(args);
 using var http = new HttpClient { BaseAddress = new Uri(options.Url), Timeout = TimeSpan.FromSeconds(30) };

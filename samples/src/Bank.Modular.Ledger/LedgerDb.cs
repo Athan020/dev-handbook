@@ -28,6 +28,7 @@ internal sealed class LedgerDb(DbContextOptions<LedgerDb> options) : DbContext(o
     public DbSet<Account> Accounts => Set<Account>();
     public DbSet<Entry> Entries => Set<Entry>();
     public DbSet<TransferRequest> TransferRequests => Set<TransferRequest>();
+    public DbSet<CardTopUp> CardTopUps => Set<CardTopUp>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {
@@ -61,6 +62,17 @@ internal sealed class LedgerDb(DbContextOptions<LedgerDb> options) : DbContext(o
             request.Property(r => r.Status).HasMaxLength(20);
             request.Property(r => r.Reason).HasMaxLength(200);
             request.HasIndex(r => new { r.Status, r.NextAttemptAt });
+        });
+
+        model.Entity<CardTopUp>(topUp =>
+        {
+            topUp.ToTable("card_top_ups");
+            topUp.HasKey(t => t.TopUpId);
+            topUp.Property(t => t.CardId).HasMaxLength(50);
+            topUp.Property(t => t.Amount).HasPrecision(18, 2);
+            topUp.Property(t => t.Status).HasMaxLength(20);
+            topUp.Property(t => t.Detail).HasMaxLength(200);
+            topUp.HasIndex(t => new { t.Status, t.NextAttemptAt });
         });
     }
 }

@@ -47,18 +47,19 @@ internal static class EntityEndpoints
 
     // #region books-check
     /// <summary>
-    /// Do the books add up? Every account opened with the same balance, and since then only
-    /// transfers have changed balances, each posting entries that net to zero. So the total
-    /// must be unchanged, and each balance must equal its opening balance plus its entries.
+    /// Do the books add up? Every customer's account opened with the same balance, and the
+    /// bank's own accounts (negative ids) with nothing. Since then only transfers have changed
+    /// balances, each posting entries that net to zero. So the total must be unchanged, and
+    /// each balance must equal its opening balance plus its entries.
     /// </summary>
     public static Task<BooksCheck> CheckAsync(LedgerDb db, CancellationToken ct) =>
         db.Database.SqlQuery<BooksCheck>($"""
-            SELECT (SELECT count(*)::int FROM ledger.accounts) AS accounts,
+            SELECT (SELECT count(*)::int FROM ledger.accounts WHERE account_id > 0) AS accounts,
                    (SELECT coalesce(sum(balance), 0) FROM ledger.accounts) AS total_balance,
-                   (SELECT count(*) * {LedgerSeed.OpeningBalance} FROM ledger.accounts) AS expected_total,
+                   (SELECT count(*) * {LedgerSeed.OpeningBalance} FROM ledger.accounts WHERE account_id > 0) AS expected_total,
                    (SELECT coalesce(sum(amount), 0) FROM ledger.entries) AS entries_net,
                    (SELECT count(*)::int FROM ledger.accounts a
-                    WHERE a.balance <> {LedgerSeed.OpeningBalance}
+                    WHERE a.balance <> CASE WHEN a.account_id > 0 THEN {LedgerSeed.OpeningBalance} ELSE 0 END
                         + coalesce((SELECT sum(e.amount) FROM ledger.entries e WHERE e.account_id = a.account_id), 0)) AS accounts_disagreeing
             """).SingleAsync(ct);
     // #endregion books-check

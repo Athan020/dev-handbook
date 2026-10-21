@@ -329,6 +329,169 @@ static class ModularLabs
 
     sealed record RequestStatus(string Status, string? Reason);
 
+    // --top-ups N (B5 stage 5): sends N card top-ups (default 500) at --rate a second (default
+    // 25), --blocked 0.02 of them to blocked cards. Waits for any still in progress (up to 60 s),
+    // then reconciles: each of the ledger's top-ups from this run against the cards service's
+    // own record of what it credited (at --fake-url).
+    public static async Task TopUpsAsync(string[] args)
+    {
+        CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+        var count = Int(args, "--top-ups", 500);
+        var rate = Int(args, "--rate", 25);
+        var accounts = Int(args, "--accounts", 1000);
+        var blocked = Double(args, "--blocked", 0.02);
+        using var http = new HttpClient { BaseAddress = new Uri(Get(args, "--url", "http://localhost:5100")), Timeout = TimeSpan.FromSeconds(30) };
+        using var fake = new HttpClient { BaseAddress = new Uri(Get(args, "--fake-url", "http://localhost:5090")) };
+        var run = Guid.NewGuid().ToString("N")[..6];
+        var responses = new ConcurrentDictionary<string, int>();
+
+        var clock = Stopwatch.StartNew();
+        var all = new List<Task>();
+        for (var i = 0; i < count; i++)
+        {
+            var due = TimeSpan.FromSeconds(i / (double)rate);
+            if (due > clock.Elapsed) await Task.Delay(due - clock.Elapsed);
+            var account = Random.Shared.Next(1, accounts + 1);
+            var card = $"{(Random.Shared.NextDouble() < blocked ? "blocked" : "card")}-{run}-{account}";
+            all.Add(Task.Run(async () =>
+            {
+                string outcome;
+                try
+                {
+                    using var response = await http.PostAsJsonAsync("/card-top-ups", new { accountId = account, cardId = card, amount = Random.Shared.Next(1_000, 20_000) / 100m });
+                    outcome = ((int)response.StatusCode).ToString(CultureInfo.InvariantCulture);
+                }
+                catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+                {
+                    outcome = "no answer";
+                }
+                responses.AddOrUpdate(outcome, 1, (_, n) => n + 1);
+            }));
+        }
+        await Task.WhenAll(all);
+
+        List<LedgerTopUp> ours = [];
+        var waited = Stopwatch.StartNew();
+        do
+        {
+            if (ours.Count > 0) await Task.Delay(500);
+            ours = (await http.GetFromJsonAsync<List<LedgerTopUp>>("/card-top-ups"))!.Where(t => t.CardId.Contains($"-{run}-", StringComparison.Ordinal)).ToList();
+        }
+        while (responses.ContainsKey("202") && ours.Any(t => t.Status == "Debited") && waited.Elapsed < TimeSpan.FromSeconds(60));
+
+        // #region reconcile-top-ups
+        var credited = (await fake.GetFromJsonAsync<List<CardCredit>>("/cards/top-ups"))!
+            .Where(c => c.CardId.Contains($"-{run}-", StringComparison.Ordinal))
+            .ToDictionary(c => Guid.Parse(c.Reference));
+        var classes = ours.GroupBy(t => (t.Status, Credited: credited.ContainsKey(t.TopUpId)) switch
+        {
+            ("Completed", true) => "right: debited and credited",
+            ("Refunded", false) => "right: refunded, never credited",
+            ("Debited", false) => "WRONG: debited, never credited, never refunded",
+            ("Debited", true) => "WRONG: credited, but the ledger still has it in transit",
+            ("Refunded", true) => "WRONG: credited and refunded",
+            ("Completed", false) => "WRONG: completed, but never credited",
+            var other => $"WRONG: {other}",
+        });
+        // #endregion reconcile-top-ups
+
+        Console.WriteLine($"{count} top-ups at {rate}/s ({blocked:P0} to blocked cards): responses {string.Join(", ", responses.OrderByDescending(r => r.Value).Select(r => $"{r.Key} x {r.Value}"))}");
+        foreach (var group in classes.OrderBy(g => g.Key))
+            Console.WriteLine($"  {group.Key}: {group.Count()} (R{Money(group.Sum(t => t.Amount))})");
+        var inTransit = await http.GetFromJsonAsync<EntityAccount>("/accounts/-1");
+        Console.WriteLine($"  ledger's 'card top-ups in transit' account: R{Money(inTransit!.Balance)}");
+    }
+
+    sealed record LedgerTopUp(Guid TopUpId, int AccountId, string CardId, decimal Amount, string Status, int Attempts);
+
+    sealed record CardCredit(string Reference, string CardId, decimal Amount);
+
+    // --home calls|bff (B5 stage 6): loads the mobile app's home screen --count times (default
+    // 200), --concurrency at once (default 4), through the gateway at --url (default 5110).
+    // "calls" makes the four calls the screen needs, one after another or with --parallel;
+    // "bff" makes one call to /app/home. --rtt 150 adds 150 ms to every request, as a mobile
+    // network's round trip would. --direct sends "calls" straight to the services, no gateway.
+    public static async Task HomeAsync(string[] args)
+    {
+        CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+        var mode = Get(args, "--home", "calls");
+        var count = Int(args, "--count", 200);
+        var concurrency = Int(args, "--concurrency", 4);
+        var rtt = Int(args, "--rtt", 0);
+        var parallel = args.Contains("--parallel");
+        var direct = args.Contains("--direct");
+        var accounts = Int(args, "--accounts", 1000);
+        using var gateway = new HttpClient { BaseAddress = new Uri(Get(args, "--url", "http://localhost:5110")), Timeout = TimeSpan.FromSeconds(30) };
+        using var ledger = new HttpClient { BaseAddress = new Uri(Get(args, "--ledger-url", "http://localhost:5100")) };
+        using var payees = new HttpClient { BaseAddress = new Uri(Get(args, "--payees-url", "http://localhost:5101")) };
+        using var statements = new HttpClient { BaseAddress = new Uri(Get(args, "--statements-url", "http://localhost:5102")) };
+        var tokens = new ConcurrentDictionary<int, string>();
+        var times = new ConcurrentBag<double>();
+        var bytes = new ConcurrentBag<long>();
+        var failures = new ConcurrentDictionary<string, int>();
+
+        async Task<long> GetAsync(HttpClient http, string path, string? token)
+        {
+            if (rtt > 0) await Task.Delay(rtt); // the mobile network's round trip
+            using var request = new HttpRequestMessage(HttpMethod.Get, path);
+            if (token is not null) request.Headers.Authorization = new("Bearer", token);
+            using var response = await http.SendAsync(request);
+            var body = await response.Content.ReadAsByteArrayAsync();
+            if (!response.IsSuccessStatusCode) failures.AddOrUpdate(((int)response.StatusCode).ToString(CultureInfo.InvariantCulture), 1, (_, n) => n + 1);
+            return body.LongLength;
+        }
+
+        async Task ScreenAsync()
+        {
+            var account = Random.Shared.Next(1, accounts + 1);
+            var token = direct ? null : tokens.GetValueOrDefault(account);
+            if (!direct && token is null)
+            {
+                using var issued = await gateway.PostAsync($"/lab/token?accountId={account}", null);
+                tokens[account] = token = (await issued.Content.ReadAsStringAsync()).Trim('"');
+            }
+            var now = DateTimeOffset.UtcNow;
+            var timer = Stopwatch.StartNew();
+            long received;
+            if (mode == "bff")
+            {
+                received = await GetAsync(gateway, "/app/home", token);
+            }
+            else
+            {
+                var calls = new (HttpClient Http, string Path)[]
+                {
+                    (direct ? ledger : gateway, $"/accounts/{account}"),
+                    (direct ? statements : gateway, $"/accounts/{account}/statements/{now.Year}/{now.Month}"),
+                    (direct ? payees : gateway, $"/accounts/{account}/payees"),
+                    (direct ? ledger : gateway, $"/accounts/{account}/card-top-ups"),
+                };
+                if (parallel)
+                {
+                    received = (await Task.WhenAll(calls.Select(c => GetAsync(c.Http, c.Path, token)))).Sum();
+                }
+                else
+                {
+                    received = 0;
+                    foreach (var (http, path) in calls) received += await GetAsync(http, path, token);
+                }
+            }
+            times.Add(timer.Elapsed.TotalMilliseconds);
+            bytes.Add(received);
+        }
+
+        var next = 0;
+        await Task.WhenAll(Enumerable.Range(0, concurrency).Select(async _ =>
+        {
+            while (Interlocked.Increment(ref next) <= count) await ScreenAsync();
+        }));
+
+        var sorted = times.Order().ToArray();
+        Console.WriteLine($"{count} home screens, {mode}{(parallel ? ", in parallel" : "")}{(direct ? ", straight to the services" : " through the gateway")}, {rtt} ms round trip: " +
+            $"p50 {sorted[sorted.Length / 2]:F0} ms, p99 {sorted[(int)(sorted.Length * 0.99)]:F0} ms; {bytes.Average() / 1024:F1} KB a screen" +
+            (failures.IsEmpty ? "" : $"; failures {string.Join(", ", failures.Select(f => $"{f.Key} x {f.Value}"))}"));
+    }
+
     static string Describe(Books books)
     {
         var missing = books.ExpectedTotal - books.TotalBalance;

@@ -14,7 +14,7 @@ status: written
 
 Statements no longer need the ledger to be up. Transfers do need other services, and more of them each quarter. Paying a payee now means the ledger asking the payees service who the payee is, then a customers service whether the account is in good standing, a limits service whether the amount is allowed, and the fraud service whether it looks right. Each is its own deployment, each is available 99.9% of the time, and each is called in turn while the customer waits.
 
-Transfers are less available than any one of them, and slower than all of them added together. In the lab, with each check failing 1% of calls (exaggerated, so a one-minute run shows it), 97.2% of transfers went through, with a median of 95 ms. When the fraud service was down for ten seconds, every transfer sent in those ten seconds failed.
+Transfers are less available than any one of them, and slower than all of them added together. In the lab, with each check failing 1% of calls (exaggerated, so a one-minute run shows it), 96.5% of transfers went through, with a median of 95 ms. When the fraud service was down for ten seconds, every transfer sent in those ten seconds failed.
 
 ## Stop and think
 
@@ -64,14 +64,14 @@ In the lab, the ledger calls the payees service over HTTP, then three checks in 
 
 <<< @/../samples/src/Bank.Modular.Ledger/Checks.cs#run-checks
 
-Each line is 1,200 transfers, at 20 a second for a minute:
+Each line is 1,200 transfers, at 20 a second for a minute; the parallel line is two runs:
 
 | How the ledger calls | Transfers made | Median | 99th percentile |
 |---|---|---|---|
-| In sequence | 97.2% | 95 ms | 323 ms |
-| In parallel | 97.4% | 45 ms | 265 ms |
-| In parallel, retrying a failure once | 100% | 46 ms | 266 ms |
-| ... with the fraud service down for 10 seconds | 83.2%: all 200 sent while it was down failed | 44 ms | 266 ms |
+| In sequence | 96.5% | 95 ms | 321 ms |
+| In parallel | 96.8–97.6% | 41–45 ms | 269–271 ms |
+| In parallel, retrying a failure once | 100% | 45 ms | 267 ms |
+| ... with the fraud service down for 10 seconds | 83.2%: all 200 sent while it was down failed | 43 ms | 266 ms |
 
 Parallel calls halved the median but not the tail, and didn't change availability. A retry recovered every independent failure. Neither helped when a service was actually down.
 
@@ -87,7 +87,7 @@ With the same ten-second fraud outage:
 
 | | Answered | Transfers made | From request to made |
 |---|---|---|---|
-| Accept now, make afterwards | 1,200 of 1,200, with 202, median 5 ms | 100%, including all 200 sent while fraud was down | median about 0.5 s; 99th percentile 12.7 s, the ones that waited out the outage |
+| Accept now, make afterwards | 1,200 of 1,200, with 202, median 5 ms | 100%, including all 200 sent while fraud was down | median about 0.5 s; 99th percentile 11.7 s, the ones that waited out the outage |
 
 The load tool checks each accepted transfer's status every half second, so those times are accurate to about half a second.
 
@@ -99,7 +99,7 @@ What accepting costs: the customer gets "accepted" rather than "done", so they n
 
 Timeouts on every call, retries for idempotent calls with backoff and a budget, and a circuit breaker for each dependency (all of B4).
 
-**Fixes:** independent, transient failures. In the lab, one retry took transfers from 97.4% to 100%.
+**Fixes:** independent, transient failures. In the lab, one retry took transfers from about 97% to 100%.
 **Costs:** a little latency on retries, and configuration to get right.
 **Breaks:** nothing, but it can't help when a dependency is down for minutes. In the lab, every transfer failed for the ten seconds fraud was down.
 **Don't use it when:** the call isn't idempotent. Retrying a payment without an idempotency key pays twice.
@@ -108,7 +108,7 @@ Timeouts on every call, retries for idempotent calls with backoff and a budget, 
 
 Make independent calls at the same time.
 
-**Fixes:** latency adding up. The lab's median went from 95 ms to 45 ms.
+**Fixes:** latency adding up. The lab's median went from 95 ms to 41–45 ms.
 **Costs:** a little more code; and more load at once on the dependencies.
 **Breaks:** nothing, but it doesn't help availability or the tail, and only works for calls that don't need each other's answers.
 

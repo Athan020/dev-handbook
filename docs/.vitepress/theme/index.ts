@@ -12,6 +12,7 @@ import PoolSimulator from './components/PoolSimulator.vue'
 import RateLimiterVisualiser from './components/RateLimiterVisualiser.vue'
 import ReplicaSimulator from './components/ReplicaSimulator.vue'
 import RetryStormSimulator from './components/RetryStormSimulator.vue'
+import SagaStepper from './components/SagaStepper.vue'
 import SqlPlayground from './components/SqlPlayground.vue'
 import StopAndThink from './components/StopAndThink.vue'
 import './custom.css'
@@ -33,5 +34,6 @@ export default {
     app.component('RetryStormSimulator', RetryStormSimulator)
     app.component('RateLimiterVisualiser', RateLimiterVisualiser)
     app.component('ChainCalculator', ChainCalculator)
+    app.component('SagaStepper', SagaStepper)
   },
 } satisfies Theme
