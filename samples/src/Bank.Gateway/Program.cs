@@ -58,6 +58,7 @@ builder.Services.AddReverseProxy()
 // #endregion edge
 
 builder.Services.AddHome(builder.Configuration);
+builder.Services.AddPayeesMigration();
 
 var app = builder.Build();
 app.UseAuthentication();
@@ -80,10 +81,17 @@ app.MapReverseProxy(proxy =>
         }
         await next();
     });
+
+    // Stage 7: payees requests go to the monolith's module or the new service, as the
+    // migration says.
+    proxy.Use((context, next) => context.GetReverseProxyFeature().Route.Config.ClusterId == "payees"
+        ? context.RequestServices.GetRequiredService<PayeesMigration>().RouteAsync(context, next)
+        : next());
 });
 // #endregion ownership
 
 app.MapHome();
+app.MapPayeesMigration();
 
 // Lab only: a token for any account you ask for. A real system gets tokens from an identity
 // provider, after the customer has signed in (B9).

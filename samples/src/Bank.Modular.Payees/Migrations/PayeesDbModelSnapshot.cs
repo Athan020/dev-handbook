@@ -23,6 +23,80 @@ namespace Bank.Modular.Payees.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Bank.Modular.Payees.FollowPositionRow", b =>
+                {
+                    b.Property<string>("Source")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("source");
+
+                    b.Property<DateTimeOffset>("CheckedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("checked_at");
+
+                    b.Property<long>("Position")
+                        .HasColumnType("bigint")
+                        .HasColumnName("position");
+
+                    b.HasKey("Source")
+                        .HasName("pk_follow_positions");
+
+                    b.ToTable("follow_positions", "payees");
+                });
+
+            modelBuilder.Entity("Bank.Modular.Payees.PayeeChangeRow", b =>
+                {
+                    b.Property<long>("Position")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("position");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Position"));
+
+                    b.Property<DateTimeOffset>("AddedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("added_at");
+
+                    b.Property<DateTimeOffset>("ChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("changed_at");
+
+                    b.Property<int>("CustomerAccountId")
+                        .HasColumnType("integer")
+                        .HasColumnName("customer_account_id");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("PayeeAccountId")
+                        .HasColumnType("integer")
+                        .HasColumnName("payee_account_id");
+
+                    b.Property<Guid>("PayeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("payee_id");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("reference");
+
+                    b.HasKey("Position")
+                        .HasName("pk_payee_changes");
+
+                    b.ToTable("payee_changes", "payees");
+                });
+
             modelBuilder.Entity("Bank.Modular.Payees.PayeeRow", b =>
                 {
                     b.Property<Guid>("PayeeId")

@@ -24,6 +24,14 @@ public static class PayeesModule
         services.AddScoped<PayeeStore>();
         services.AddScoped<IPayees>(sp => sp.GetRequiredService<PayeeStore>());
         services.AddTransient(_ => new PayeesSeed(config.GetValue("Modular:SeedAccounts", 1000)));
+
+        // B5 stage 7: follow another payees store's changes, such as the new payees service's.
+        if (config["Payees:FollowUrl"] is { } follow)
+        {
+            services.AddSingleton(new FollowOptions(new Uri(follow), TimeSpan.FromMilliseconds(config.GetValue("Payees:FollowIntervalMs", 200))));
+            services.AddHttpClient(PayeeFollower.HttpClientName, http => http.Timeout = TimeSpan.FromSeconds(5));
+            services.AddHostedService<PayeeFollower>();
+        }
         return services;
     }
 
@@ -47,8 +55,28 @@ public static class PayeesModule
         app.MapDelete("/accounts/{accountId:int}/payees/{payeeId:guid}", async (int accountId, Guid payeeId, PayeeStore store, CancellationToken ct) =>
             await store.RemoveAsync(accountId, payeeId, ct) ? Results.NoContent() : Results.NotFound());
 
+        // Stage 7: the change feed, where it has got to, and how far this store has followed another.
+        app.MapGet("/payee-changes", async (long after, int? max, PayeesDb db, TimeProvider time, CancellationToken ct) =>
+            Results.Ok(await PayeeFeed.ReadAsync(db, after, Math.Clamp(max ?? 500, 1, 5000), time.GetUtcNow(), ct)));
+        app.MapGet("/payee-changes/head", async (PayeesDb db, CancellationToken ct) =>
+            Results.Ok(new { position = await db.PayeeChanges.MaxAsync(c => (long?)c.Position, ct) ?? 0 }));
+        app.MapGet("/payees/following", async (PayeesDb db, CancellationToken ct) =>
+            Results.Ok(await db.FollowPositions.AsNoTracking().ToListAsync(ct)));
+
+        // For the big-bang lab only: every payee, as of now, in one response.
+        app.MapGet("/payees/export", async (PayeesDb db, CancellationToken ct) =>
+            Results.Ok(await db.Payees.AsNoTracking().Select(p => p.ToContract()).ToListAsync(ct)));
+
         return app;
     }
+
+    /// <summary>Records every existing payee in the change log, so a follower starting from zero gets them all.</summary>
+    internal const string BackfillChanges = """
+        INSERT INTO payees.payee_changes (kind, payee_id, customer_account_id, payee_account_id, name, reference, added_at, changed_at)
+        SELECT 'Added', payee_id, customer_account_id, payee_account_id, name, reference, added_at, added_at
+        FROM payees.payees
+        ORDER BY added_at, payee_id
+        """;
 
     /// <summary>Brings the module's tables up to date, then seeds three payees per account if it has none.</summary>
     public static async Task PrepareAsync(IServiceProvider services, CancellationToken ct)
@@ -70,6 +98,7 @@ public static class PayeesModule
                     SELECT uuidv7(), a, (a + k - 1) % {seed.Accounts} + 1, 'Customer ' || ((a + k - 1) % {seed.Accounts} + 1), 'Payment', now()
                     FROM generate_series(1, {seed.Accounts}) AS a, generate_series(1, 3) AS k
                     """, ct);
+                await db.Database.ExecuteSqlRawAsync(BackfillChanges, ct);
             }
         }
         finally
@@ -99,6 +128,8 @@ internal sealed class PayeeRow
 internal sealed class PayeesDb(DbContextOptions<PayeesDb> options) : DbContext(options)
 {
     public DbSet<PayeeRow> Payees => Set<PayeeRow>();
+    public DbSet<PayeeChangeRow> PayeeChanges => Set<PayeeChangeRow>();
+    public DbSet<FollowPositionRow> FollowPositions => Set<FollowPositionRow>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {
@@ -111,6 +142,20 @@ internal sealed class PayeesDb(DbContextOptions<PayeesDb> options) : DbContext(o
             payee.Property(p => p.Reference).HasMaxLength(200);
             // A customer saves each account once.
             payee.HasIndex(p => new { p.CustomerAccountId, p.PayeeAccountId }).IsUnique();
+        });
+        model.Entity<PayeeChangeRow>(change =>
+        {
+            change.ToTable("payee_changes");
+            change.HasKey(c => c.Position);
+            change.Property(c => c.Kind).HasMaxLength(20);
+            change.Property(c => c.Name).HasMaxLength(200);
+            change.Property(c => c.Reference).HasMaxLength(200);
+        });
+        model.Entity<FollowPositionRow>(position =>
+        {
+            position.ToTable("follow_positions");
+            position.HasKey(p => p.Source);
+            position.Property(p => p.Source).HasMaxLength(200);
         });
     }
 }
@@ -143,6 +188,7 @@ internal sealed class PayeeStore(PayeesDb db, TimeProvider time) : IPayees
             AddedAt = time.GetUtcNow(),
         };
         db.Payees.Add(row);
+        db.PayeeChanges.Add(PayeeChangeRow.For(ChangeKind.Added, row, row.AddedAt)); // saved together
         try
         {
             await db.SaveChangesAsync(ct);
@@ -154,6 +200,20 @@ internal sealed class PayeeStore(PayeesDb db, TimeProvider time) : IPayees
         }
     }
 
-    public async Task<bool> RemoveAsync(int customerAccountId, Guid payeeId, CancellationToken ct) =>
-        await db.Payees.Where(p => p.CustomerAccountId == customerAccountId && p.PayeeId == payeeId).ExecuteDeleteAsync(ct) > 0;
+    public async Task<bool> RemoveAsync(int customerAccountId, Guid payeeId, CancellationToken ct)
+    {
+        var row = await db.Payees.FirstOrDefaultAsync(p => p.CustomerAccountId == customerAccountId && p.PayeeId == payeeId, ct);
+        if (row is null) return false;
+        db.Payees.Remove(row);
+        db.PayeeChanges.Add(PayeeChangeRow.For(ChangeKind.Removed, row, time.GetUtcNow())); // saved together
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return false; // removed by someone else in the meantime
+        }
+    }
 }

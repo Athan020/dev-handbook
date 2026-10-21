@@ -2,7 +2,7 @@
 title: "B5: One service becomes many"
 track: backend
 journey: one-service-becomes-many
-status: draft
+status: written
 ---
 
 # B5: One service becomes many
@@ -42,7 +42,7 @@ flowchart TB
 | 4 | [Sync or async between services](./04-sync-or-async): Temporal coupling, chains of calls | A transfer calls four services in turn, and each one's failures add up |
 | 5 | [A transaction across services](./05-sagas): Sagas and compensations | A card top-up debited the ledger, the cards service failed, and nothing undid it |
 | 6 | [One front door](./06-one-front-door): API gateways, backends for frontends | The mobile app calls six services, and one screen takes six round trips |
-| 7 | [Moving a capability without stopping](./07-strangler-fig): The strangler fig | The plan is to rewrite payments and switch over in one weekend |
+| 7 | [Moving a capability without stopping](./07-strangler-fig): The strangler fig | The plan is to rewrite payees as a service and switch over in one weekend |
 | ★ | [Capstone: move payees out of the monolith](./capstone) | — |
 
 ## Before you start

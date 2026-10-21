@@ -492,6 +492,123 @@ static class ModularLabs
             (failures.IsEmpty ? "" : $"; failures {string.Join(", ", failures.Select(f => $"{f.Key} x {f.Value}"))}"));
     }
 
+    // --payee-churn (B5 stage 7): for --seconds (default 60), lists, adds and removes payees through
+    // the gateway at --url, --rate a second (default 20), for accounts 1 to --accounts (default 200),
+    // retrying writes the gateway asks to wait. Then checks every payee it added or removed in
+    // both stores, the monolith's module (--main-url) and the new service (--service-url), and
+    // in whichever one the gateway now reads from.
+    public static async Task PayeeChurnAsync(string[] args)
+    {
+        CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+        var seconds = Int(args, "--seconds", 60);
+        var rate = Int(args, "--rate", 20);
+        var accounts = Int(args, "--accounts", 200);
+        using var gateway = new HttpClient { BaseAddress = new Uri(Get(args, "--url", "http://localhost:5110")), Timeout = TimeSpan.FromSeconds(30) };
+        using var main = new HttpClient { BaseAddress = new Uri(Get(args, "--main-url", "http://localhost:5101")) };
+        using var service = new HttpClient { BaseAddress = new Uri(Get(args, "--service-url", "http://localhost:5103")) };
+        var tokens = new ConcurrentDictionary<int, string>();
+        var added = new ConcurrentDictionary<Guid, int>();    // payee -> account, still expected to exist
+        var removed = new ConcurrentDictionary<Guid, int>();  // payee -> account, expected gone
+        var outcomes = new ConcurrentDictionary<string, int>();
+        var waits = 0;
+        var n = 0;
+
+        async Task<HttpResponseMessage> SendAsync(int account, Func<HttpRequestMessage> make)
+        {
+            if (!tokens.TryGetValue(account, out var token))
+            {
+                using var issued = await gateway.PostAsync($"/lab/token?accountId={account}", null);
+                tokens[account] = token = (await issued.Content.ReadAsStringAsync()).Trim('"');
+            }
+            for (var attempt = 0; ; attempt++)
+            {
+                using var request = make();
+                request.Headers.Authorization = new("Bearer", token);
+                var response = await gateway.SendAsync(request);
+                if (response.StatusCode != HttpStatusCode.ServiceUnavailable || attempt == 50) return response;
+                Interlocked.Increment(ref waits);
+                response.Dispose();
+                await Task.Delay(100);
+            }
+        }
+
+        async Task OneAsync()
+        {
+            var account = Random.Shared.Next(1, accounts + 1);
+            var mine = added.Where(a => a.Value == account).Select(a => a.Key).ToList();
+            var roll = Random.Shared.NextDouble();
+            if (roll < 0.4)
+            {
+                // A customer looking at their payees.
+                using var response = await SendAsync(account, () => new HttpRequestMessage(HttpMethod.Get, $"/accounts/{account}/payees"));
+                outcomes.AddOrUpdate($"list {(int)response.StatusCode}", 1, (_, c) => c + 1);
+            }
+            else if (mine.Count > 0 && roll < 0.6)
+            {
+                var payeeId = mine[Random.Shared.Next(mine.Count)];
+                if (!added.TryRemove(payeeId, out _)) return;
+                using var response = await SendAsync(account, () => new HttpRequestMessage(HttpMethod.Delete, $"/accounts/{account}/payees/{payeeId}"));
+                outcomes.AddOrUpdate($"remove {(int)response.StatusCode}", 1, (_, c) => c + 1);
+                if (response.IsSuccessStatusCode) removed[payeeId] = account;
+                else added[payeeId] = account;
+            }
+            else
+            {
+                var payeeAccount = Random.Shared.Next(1, 1001);
+                if (payeeAccount == account) return;
+                using var response = await SendAsync(account, () => new HttpRequestMessage(HttpMethod.Post, $"/accounts/{account}/payees")
+                {
+                    Content = JsonContent.Create(new { payeeAccountId = payeeAccount, name = $"Churn {Interlocked.Increment(ref n)}" }),
+                });
+                outcomes.AddOrUpdate($"add {(int)response.StatusCode}", 1, (_, c) => c + 1);
+                if (response.StatusCode == HttpStatusCode.Created)
+                    added[(await response.Content.ReadFromJsonAsync<PayeeRef>())!.PayeeId] = account;
+            }
+        }
+
+        var clock = Stopwatch.StartNew();
+        var all = new List<Task>();
+        for (var i = 0; i < seconds * rate; i++)
+        {
+            var due = TimeSpan.FromSeconds(i / (double)rate);
+            if (due > clock.Elapsed) await Task.Delay(due - clock.Elapsed);
+            all.Add(OneAsync());
+        }
+        await Task.WhenAll(all);
+        await Task.Delay(2000); // let followers catch up
+
+        // #region verify-churn
+        async Task<string> CheckAsync(string name, Func<int, Task<HashSet<Guid>>> payeesOf)
+        {
+            var touched = added.Values.Concat(removed.Values).Distinct().ToList();
+            var lost = 0;
+            var resurrected = 0;
+            foreach (var account in touched)
+            {
+                HashSet<Guid> present;
+                try { present = await payeesOf(account); }
+                catch (HttpRequestException) { return $"{name}: unavailable"; }
+                lost += added.Count(a => a.Value == account && !present.Contains(a.Key));
+                resurrected += removed.Count(r => r.Value == account && present.Contains(r.Key));
+            }
+            return $"{name}: {lost} lost, {resurrected} removed but back";
+        }
+        async Task<HashSet<Guid>> ListAsync(HttpClient http, int account, bool viaGateway)
+        {
+            using var response = viaGateway
+                ? await SendAsync(account, () => new HttpRequestMessage(HttpMethod.Get, $"/accounts/{account}/payees"))
+                : await http.GetAsync($"/accounts/{account}/payees");
+            response.EnsureSuccessStatusCode();
+            return (await response.Content.ReadFromJsonAsync<PayeeRef[]>())!.Select(p => p.PayeeId).ToHashSet();
+        }
+        // #endregion verify-churn
+
+        Console.WriteLine($"{seconds} s of payee requests at {rate}/s: {string.Join(", ", outcomes.OrderBy(o => o.Key).Select(o => $"{o.Key} x {o.Value}"))}; writes asked to wait {waits} times");
+        Console.WriteLine($"  {await CheckAsync("what customers now see", a => ListAsync(gateway, a, true))}");
+        Console.WriteLine($"  {await CheckAsync("monolith's module", a => ListAsync(main, a, false))}");
+        Console.WriteLine($"  {await CheckAsync("new service", a => ListAsync(service, a, false))}");
+    }
+
     static string Describe(Books books)
     {
         var missing = books.ExpectedTotal - books.TotalBalance;
